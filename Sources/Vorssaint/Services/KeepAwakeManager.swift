@@ -441,7 +441,8 @@ final class KeepAwakeManager: ObservableObject {
         KeepAwakeAutomationSupport.enabledConditions(
             externalDisplayEnabled: UserDefaults.standard.bool(forKey: DefaultsKey.keepAwakeExternalDisplay),
             powerEnabled: UserDefaults.standard.bool(forKey: DefaultsKey.keepAwakeConnectedToPower),
-            runningAppsEnabled: UserDefaults.standard.bool(forKey: DefaultsKey.keepAwakeRunningApps)
+            runningAppsEnabled: UserDefaults.standard.bool(forKey: DefaultsKey.keepAwakeRunningApps),
+            hasSelectedApps: !runningAppBundleIDs.isEmpty
         )
     }
 

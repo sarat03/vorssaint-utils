@@ -57,13 +57,20 @@ enum KeepAwakeAutomationSupport {
     /// The conditions a person switched on, whether or not they hold right
     /// now. `matchingConditions` returns "enabled and satisfied", so the two
     /// sets are equal exactly when every enabled condition holds.
+    ///
+    /// A condition that cannot be evaluated does not count as enabled. The
+    /// app list is the only one of the three that can be switched on and left
+    /// unconfigured, and `matchingConditions` never reports it while the list
+    /// is empty, so counting it here would leave All permanently unsatisfiable
+    /// with no sign of why.
     static func enabledConditions(externalDisplayEnabled: Bool,
                                   powerEnabled: Bool,
-                                  runningAppsEnabled: Bool) -> Set<KeepAwakeAutomationCondition> {
+                                  runningAppsEnabled: Bool,
+                                  hasSelectedApps: Bool = true) -> Set<KeepAwakeAutomationCondition> {
         var enabled = Set<KeepAwakeAutomationCondition>()
         if externalDisplayEnabled { enabled.insert(.externalDisplay) }
         if powerEnabled { enabled.insert(.power) }
-        if runningAppsEnabled { enabled.insert(.runningApps) }
+        if runningAppsEnabled, hasSelectedApps { enabled.insert(.runningApps) }
         return enabled
     }
 

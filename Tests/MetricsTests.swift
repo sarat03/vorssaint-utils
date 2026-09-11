@@ -2303,6 +2303,14 @@ struct MetricsTests {
         expect(!KeepAwakeAutomationSupport.conditionsSatisfied(
             matching: [], enabled: [], requireAll: true
         ), "All never treats an empty selection as satisfied")
+        let powerPlusUnnamedApps = KeepAwakeAutomationSupport.enabledConditions(
+            externalDisplayEnabled: false, powerEnabled: true,
+            runningAppsEnabled: true, hasSelectedApps: false)
+        expect(powerPlusUnnamedApps == [.power],
+               "an app condition with no app named is not a condition All has to satisfy")
+        expect(KeepAwakeAutomationSupport.conditionsSatisfied(
+            matching: [.power], enabled: powerPlusUnnamedApps, requireAll: true
+        ), "All stays usable while the app list is still empty")
         expect(KeepAwakeAutomationSupport.action(
             featureAvailable: true,
             matchingConditions: [.externalDisplay],
