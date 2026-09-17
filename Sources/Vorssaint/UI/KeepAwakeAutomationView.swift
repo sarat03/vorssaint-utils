@@ -50,6 +50,8 @@ struct KeepAwakeAutomationEditor: View {
                 } label: { EmptyView() }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .controlSize(compact ? .small : .regular)
+                .font(.system(size: compact ? 10 : 12, weight: .medium))
                 .onChange(of: requireAll) { _, _ in
                     awake.automationPreferencesDidChange()
                 }

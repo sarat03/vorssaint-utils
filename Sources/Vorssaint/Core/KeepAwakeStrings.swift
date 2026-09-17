@@ -167,8 +167,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Active because an automatic condition is met",
         pauseWhenLockedToggle: "Pause while the Mac is locked",
         pauseWhenLockedCaption: "Follows normal sleep rules while locked and resumes the remaining session after you unlock.",
-        matchAny: "Any condition",
-        matchAll: "All conditions",
+        matchAny: "Any",
+        matchAll: "All",
         automationCaptionAll: "Starts only when every selected condition is active."
     )
 
@@ -189,8 +189,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Ativo porque uma condição automática foi atendida",
         pauseWhenLockedToggle: "Pausar enquanto o Mac estiver bloqueado",
         pauseWhenLockedCaption: "Segue as regras normais de repouso enquanto estiver bloqueado e retoma o tempo restante após o desbloqueio.",
-        matchAny: "Qualquer condição",
-        matchAll: "Todas as condições",
+        matchAny: "Qualquer",
+        matchAll: "Todas",
         automationCaptionAll: "Inicia somente quando todas as condições selecionadas estiverem ativas."
     )
 
@@ -211,8 +211,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Otomatik bir koşul sağlandığı için etkin",
         pauseWhenLockedToggle: "Mac kilitliyken duraklat",
         pauseWhenLockedCaption: "Kilitliyken normal uyku kurallarını izler ve kilidi açtığınızda kalan oturumu sürdürür.",
-        matchAny: "Herhangi bir koşul",
-        matchAll: "Tüm koşullar",
+        matchAny: "Herhangi",
+        matchAll: "Tümü",
         automationCaptionAll: "Yalnızca seçili tüm koşullar etkinken başlar."
     )
 
@@ -233,8 +233,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Активно по автоматическому условию",
         pauseWhenLockedToggle: "Приостанавливать, пока Mac заблокирован",
         pauseWhenLockedCaption: "Пока Mac заблокирован, действуют обычные правила сна, а после разблокировки продолжается оставшееся время сеанса.",
-        matchAny: "Любое условие",
-        matchAll: "Все условия",
+        matchAny: "Любое",
+        matchAll: "Все",
         automationCaptionAll: "Запускается только когда активны все выбранные условия."
     )
 
@@ -255,8 +255,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Activo porque se cumple una condición automática",
         pauseWhenLockedToggle: "Pausar mientras el Mac esté bloqueado",
         pauseWhenLockedCaption: "Sigue las reglas de reposo habituales mientras está bloqueado y reanuda el tiempo restante al desbloquearlo.",
-        matchAny: "Cualquier condición",
-        matchAll: "Todas las condiciones",
+        matchAny: "Cualquiera",
+        matchAll: "Todas",
         automationCaptionAll: "Se activa solo cuando todas las condiciones seleccionadas están activas."
     )
 
@@ -277,8 +277,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Aktiv, weil eine automatische Bedingung erfüllt ist",
         pauseWhenLockedToggle: "Pausieren, solange der Mac gesperrt ist",
         pauseWhenLockedCaption: "Im Sperrzustand gelten die normalen Ruhezustandsregeln. Nach dem Entsperren läuft die verbleibende Sitzung weiter.",
-        matchAny: "Beliebige Bedingung",
-        matchAll: "Alle Bedingungen",
+        matchAny: "Eine",
+        matchAll: "Alle",
         automationCaptionAll: "Startet nur, wenn alle ausgewählten Bedingungen erfüllt sind."
     )
 
@@ -299,8 +299,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Actif car une condition automatique est remplie",
         pauseWhenLockedToggle: "Suspendre lorsque le Mac est verrouillé",
         pauseWhenLockedCaption: "Suit les règles de veille habituelles pendant le verrouillage et reprend le temps restant après le déverrouillage.",
-        matchAny: "N’importe quelle condition",
-        matchAll: "Toutes les conditions",
+        matchAny: "L’une",
+        matchAll: "Toutes",
         automationCaptionAll: "Démarre uniquement lorsque toutes les conditions sélectionnées sont actives."
     )
 
@@ -321,8 +321,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "Attivo perché una condizione automatica è soddisfatta",
         pauseWhenLockedToggle: "Metti in pausa quando il Mac è bloccato",
         pauseWhenLockedCaption: "Segue le normali regole di stop quando è bloccato e riprende il tempo rimanente dopo lo sblocco.",
-        matchAny: "Qualsiasi condizione",
-        matchAll: "Tutte le condizioni",
+        matchAny: "Qualsiasi",
+        matchAll: "Tutte",
         automationCaptionAll: "Si avvia solo quando tutte le condizioni selezionate sono attive."
     )
 
@@ -343,8 +343,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "自動条件が満たされているため有効",
         pauseWhenLockedToggle: "Macのロック中は一時停止",
         pauseWhenLockedCaption: "ロック中は通常のスリープ設定に従い、ロック解除後に残りのセッションを再開します。",
-        matchAny: "いずれかの条件",
-        matchAll: "すべての条件",
+        matchAny: "いずれか",
+        matchAll: "すべて",
         automationCaptionAll: "選択したすべての条件が満たされているときだけ開始します。"
     )
 
@@ -365,8 +365,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "자동 조건이 충족되어 활성화",
         pauseWhenLockedToggle: "Mac이 잠겨 있는 동안 일시 정지",
         pauseWhenLockedCaption: "잠겨 있는 동안 일반 잠자기 설정을 따르고 잠금 해제 후 남은 세션을 다시 시작합니다.",
-        matchAny: "조건 중 하나",
-        matchAll: "모든 조건",
+        matchAny: "하나",
+        matchAll: "모두",
         automationCaptionAll: "선택한 모든 조건이 충족될 때만 시작합니다."
     )
 
@@ -387,8 +387,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "因满足自动条件而保持唤醒",
         pauseWhenLockedToggle: "Mac 锁定时暂停",
         pauseWhenLockedCaption: "锁定期间遵循正常的睡眠设置，解锁后继续剩余时段。",
-        matchAny: "任一条件",
-        matchAll: "所有条件",
+        matchAny: "任一",
+        matchAll: "所有",
         automationCaptionAll: "仅当所有选定条件都满足时才启动。"
     )
 
@@ -409,8 +409,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "因符合自動條件而保持喚醒",
         pauseWhenLockedToggle: "Mac 鎖定時暫停",
         pauseWhenLockedCaption: "鎖定期間會依照正常的睡眠設定，解鎖後繼續剩餘時段。",
-        matchAny: "任一條件",
-        matchAll: "所有條件",
+        matchAny: "任一",
+        matchAll: "所有",
         automationCaptionAll: "僅當所有選定條件都符合時才啟動。"
     )
 
@@ -431,8 +431,8 @@ extension KeepAwakeAutomationStrings {
         automationActive: "因符合自動條件而保持喚醒",
         pauseWhenLockedToggle: "Mac 鎖定時暫停",
         pauseWhenLockedCaption: "鎖定期間會按正常睡眠設定運作，解鎖後繼續餘下時段。",
-        matchAny: "任一條件",
-        matchAll: "所有條件",
+        matchAny: "任一",
+        matchAll: "所有",
         automationCaptionAll: "只有當所有已選條件都符合時才啟動。"
     )
 }
