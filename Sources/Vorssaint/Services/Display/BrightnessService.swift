@@ -1854,7 +1854,26 @@ final class BrightnessService: ObservableObject {
         }
         forgetWriteOnlyDDCPath(pathKey)
         Self.log.log("display \(id) software dimming preferred \(preferred)")
-        refresh(force: true)
+        guard !preferred else {
+            refresh(force: true)
+            return
+        }
+        // Handing the display back to DDC has to hand the picture back with
+        // it. The scaled curve belongs to this app, and the level behind it
+        // describes the gamma route, not the monitor: left in place they show
+        // a dark screen the monitor's own controls cannot explain, and the
+        // first write to the panel then dims what is already dimmed. The
+        // curve goes back before the rebuild, so the probe reads a display
+        // showing its own picture.
+        stateLock.lock()
+        lastApplied[id] = nil
+        levelKnownAt[id] = nil
+        stateLock.unlock()
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            self.applySoftwareDim(id, value: 1)
+            DispatchQueue.main.async { [weak self] in self?.refresh(force: true) }
+        }
     }
 
     private func writeOnlyDDCPaths() -> Set<String> {
