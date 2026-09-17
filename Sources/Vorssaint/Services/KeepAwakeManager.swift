@@ -521,8 +521,14 @@ final class KeepAwakeManager: ObservableObject {
               AppFeature.keepAwake.isAvailable,
               !automationSuppressedUntilConditionsClear,
               automaticSessionAllowedByBatteryProtection() else { return false }
+        // The same full match the automation itself would need to start a
+        // session: under All, a timed session must not be handed over on one
+        // condition the automation would never have acted on (issue #1587).
         let matches = currentMatchingAutomationConditions()
-        guard !matches.isEmpty else { return false }
+        guard KeepAwakeAutomationSupport.conditionsSatisfied(
+                matching: matches,
+                enabled: currentEnabledAutomationConditions(),
+                requireAll: automationRequiresAllConditions()) else { return false }
         activeAutomationConditions = matches
         activate(minutes: 0, trigger: .automation)
         return true
