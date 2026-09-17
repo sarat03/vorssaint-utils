@@ -363,6 +363,13 @@ def main():
           + "}\n}\nextension NotchMusicAutomationFlowContract.NotchMusicAutomation {\n"
           + declaration("Sources/Vorssaint/Services/Notch/NotchMusicAutomation.swift", "    static func send(") + "}\n")
 
+    brightness_row = "Sources/Vorssaint/UI/MenuPanel/BrightnessSection.swift"
+    write("SoftwareDimmingRow.swift", "import CoreGraphics\nimport Foundation\n\n"
+          + "extension SoftwareDimmingRouteContract {\n"
+          + "final class Row {\nvar display = Display()\nvar chosen = false\n"
+          + declaration(brightness_row, "    private var offered:").replace("private var", "var", 1)
+          + "}\n}\n")
+
     brightness = "Sources/Vorssaint/Services/Display/BrightnessService.swift"
     write("SoftwareDimmingRoute.swift", "import CoreGraphics\nimport Foundation\n\n"
           + "extension SoftwareDimmingRouteContract {\n"

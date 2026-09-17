@@ -30,6 +30,17 @@ enum SoftwareDimmingRouteContract {
         }
     }
 
+    /// The display as a row sees it. A monitor behind a converter is active,
+    /// external, routed over DDC and answers no reads.
+    enum Method { case ddc, software }
+    struct Display {
+        var id: CGDirectDisplayID = 7
+        var isActive = true
+        var isBuiltIn = false
+        var method: Method? = .ddc
+        var readable = false
+    }
+
     final class Log {
         var lines: [String] = []
         func log(_ message: String) { lines.append(message) }
@@ -89,6 +100,27 @@ enum SoftwareDimmingRouteTests {
                "choosing it never restores a curve, which would undo the dim being asked for")
         expect(on.lastApplied[display] == 0.35 && on.levelKnownAt[display] != nil,
                "the level the gamma route is about to use is kept")
+
+        // Which rows offer the choice at all. The rule is the same on both
+        // surfaces, since they share the control.
+        let row = Context.Row()
+        expect(row.offered, "a monitor whose channel takes writes and answers no reads is offered the choice")
+        row.display.readable = true
+        expect(!row.offered, "a monitor whose channel answers reads is left on DDC without asking")
+        row.display.readable = false
+        row.display.isBuiltIn = true
+        expect(!row.offered, "the built-in display never routes over DDC, so it is never asked about")
+        row.display.isBuiltIn = false
+        row.display.isActive = false
+        expect(!row.offered, "a display that is switched off has nothing to dim")
+        row.display.isActive = true
+        row.display.method = .software
+        expect(!row.offered, "a display already on the gamma route for its own reasons is not a choice")
+        row.chosen = true
+        expect(row.offered,
+               "a display moved here by hand keeps the control, or there would be no way back to DDC")
+        row.display.isActive = false
+        expect(!row.offered, "not even a chosen display offers the control while it is switched off")
 
         // A display the rebuild has not routed yet has no path to record the
         // choice against, so nothing is written and no screen is touched.
