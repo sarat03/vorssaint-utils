@@ -375,9 +375,21 @@ def main():
           + "guard let index = MicMuteStrandedContract.devices.firstIndex(where: { $0.id == id })\n"
           + "else { return false }\n"
           + "let device = MicMuteStrandedContract.devices[index]\n"
+          + "guard device.muteSwitch != nil else { return false }\n"
           + "MicMuteStrandedContract.writes.append((device.uid, muted))\n"
           + "guard device.uid != MicMuteStrandedContract.refusing else { return false }\n"
           + "MicMuteStrandedContract.devices[index].muteSwitch = muted ? 1 : 0\nreturn true\n}\n"
+          + "static func inputVolume(of id: Int) -> Float? {\n"
+          + "MicMuteStrandedContract.devices.first { $0.id == id }?.volume\n}\n"
+          + "static func setInputVolume(_ value: Float, of id: Int) -> Bool {\n"
+          + "guard let index = MicMuteStrandedContract.devices.firstIndex(where: { $0.id == id })\n"
+          + "else { return false }\n"
+          + "guard !MicMuteStrandedContract.devices[index].ignoresWrites else { return true }\n"
+          + "MicMuteStrandedContract.devices[index].volume = value\nreturn true\n}\n"
+          + declaration(mic_mute, "    private static func isSilenced(")
+            .replace("private static func", "static func", 1)
+          + declaration(mic_mute, "    private static func mute(")
+            .replace("private static func", "static func", 1)
           + declaration(mic_mute, "    func refreshStrandedMute()")
           + declaration(mic_mute, "    func releaseStrandedMute()")
           + "}\n}\n")

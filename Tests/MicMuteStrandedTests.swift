@@ -8,10 +8,27 @@ import Foundation
 /// System Settings, so it never opens anything by itself: it notices, offers,
 /// and opens only when asked (issue #1568).
 enum MicMuteStrandedContract {
+    /// The production bodies name CoreAudio's types; here they stand for the
+    /// fake devices above.
+    typealias AudioDeviceID = Int
+    typealias InputDevice = Device
+
     struct Device {
         var id: Int
         var uid: String
         var muteSwitch: Int?
+        /// Devices without a mute switch fall back to the input level, which
+        /// is the other way a sweep can silence one.
+        var volume: Float? = 0.8
+        /// A driver that takes the write and keeps its level, which must never
+        /// be recorded as muted.
+        var ignoresWrites = false
+    }
+
+    struct MuteOutcome {
+        var applied: Bool
+        var savedVolumes: [String: Double]
+        var mutedDevices: [String]
     }
 
     final class Queue {
@@ -60,6 +77,52 @@ enum MicMuteStrandedTests {
     }
 
     static func run(expect: (Bool, String) -> Void) {
+        // MARK: the sweep that started it (issue #1568)
+
+        // Every microphone already quiet, none of them this app's: the sweep
+        // has silenced nothing, so it must not report a mute. Reporting one
+        // is what wrote an active mute with an empty claim list, which the
+        // unmute then had nothing to act on, leaving the microphone silent
+        // with every record saying otherwise.
+        Context.reset([silenced("built-in", id: 1)])
+        let nothingToDo = Context.Service.mute([Context.devices[0]],
+                                               savedVolumes: [:], mutedDevices: [])
+        expect(!nothingToDo.applied && nothingToDo.mutedDevices.isEmpty,
+               "a sweep that silenced nothing reports no mute, so none is recorded")
+
+        // The precondition of the loop cannot be reached: an active mute now
+        // always carries at least one device it can give back.
+        Context.reset([silenced("built-in", id: 1), open("headset", id: 2)])
+        let partly = Context.Service.mute(Context.devices, savedVolumes: [:], mutedDevices: [])
+        expect(partly.applied && partly.mutedDevices == ["headset"],
+               "a mute that reached one microphone claims that one and no other")
+        expect(Context.device("built-in")?.muteSwitch == 1,
+               "the microphone the person silenced themselves is not touched")
+
+        // A device still muted from an earlier run stays this app's to release.
+        Context.reset([silenced("built-in", id: 1)])
+        let reasserted = Context.Service.mute(Context.devices, savedVolumes: [:],
+                                              mutedDevices: ["built-in"])
+        expect(reasserted.applied && reasserted.mutedDevices == ["built-in"],
+               "a mute this app already holds is re-asserted and kept")
+
+        // The ordinary case is unchanged.
+        Context.reset([open("built-in", id: 1)])
+        let plain = Context.Service.mute(Context.devices, savedVolumes: [:], mutedDevices: [])
+        expect(plain.applied && plain.mutedDevices == ["built-in"]
+                && Context.device("built-in")?.muteSwitch == 1,
+               "an open microphone is silenced and claimed")
+
+        // A driver that takes the write and keeps its level is never claimed.
+        Context.reset([Context.Device(id: 4, uid: "interface", muteSwitch: nil,
+                                      volume: 0.7, ignoresWrites: true)])
+        let stubborn = Context.Service.mute(Context.devices, savedVolumes: [:], mutedDevices: [])
+        expect(!stubborn.applied && stubborn.mutedDevices.isEmpty
+                && stubborn.savedVolumes.isEmpty,
+               "a device that keeps its level is not recorded as muted, and its level is not saved")
+
+        // MARK: the way out when a mute is left behind
+
         // Nothing silent: nothing to offer.
         Context.reset([open("built-in", id: 1), open("headset", id: 2)])
         let quiet = Context.Service()

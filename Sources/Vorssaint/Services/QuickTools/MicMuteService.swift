@@ -207,9 +207,21 @@ final class MicMuteService: ObservableObject {
 
     /// Main thread. Publishes one sweep.
     private func finish(_ outcome: MuteOutcome, muted: Bool, announce: Bool, generation: Int) {
+        guard generation == applyGeneration else { return }
         // A sweep that reached nothing leaves the recorded state alone: it is
-        // what a later unmute needs to put every level back.
-        guard generation == applyGeneration, outcome.applied else { return }
+        // what a later unmute needs to put every level back. For a mute that
+        // means every microphone was already quiet and this app is holding
+        // none of them, which it has to say rather than record a mute it
+        // cannot undo (issue #1568). The offer is the way out of that state,
+        // so it is re-read here too.
+        guard outcome.applied else {
+            refreshStrandedMute()
+            if announce, muted {
+                QuickToolHUD.show(icon: "mic.slash.fill",
+                                  message: L10n.shared.s.micAlreadySilentHUD)
+            }
+            return
+        }
         let defaults = UserDefaults.standard
         defaults.set(outcome.savedVolumes, forKey: DefaultsKey.micMuteSavedVolumes)
         defaults.set(outcome.mutedDevices, forKey: DefaultsKey.micMuteMutedDevices)
@@ -260,10 +272,18 @@ final class MicMuteService: ObservableObject {
         for device in devices {
             // Already silent: a microphone the user muted themselves is left
             // alone, so unmuting later never opens something this app did not
-            // close. One this app already muted keeps its owner.
+            // close. One this app already muted keeps its owner, and only that
+            // one counts as a mute this app is holding. Counting the others
+            // was the whole desync: a sweep that silenced nothing still
+            // reported success, so the app recorded a mute with an empty claim
+            // list, and the unmute that followed had nothing to act on and
+            // reported success too, leaving the microphone silent while every
+            // record said otherwise (issue #1568).
             if isSilenced(device.id) {
-                outcome.applied = true
-                if owned.contains(device.uid) { outcome.mutedDevices.append(device.uid) }
+                if owned.contains(device.uid) {
+                    outcome.applied = true
+                    outcome.mutedDevices.append(device.uid)
+                }
                 continue
             }
             if setMuteSwitch(true, of: device.id) {

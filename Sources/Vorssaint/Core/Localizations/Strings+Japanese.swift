@@ -196,6 +196,7 @@ extension Strings {
         micMuteCaption: "クリックまたはショートカットでMacのマイクをどのアプリでも消音します。",
         micMutedHUD: "マイクを消音しました",
         micUnmutedHUD: "マイクを再開しました",
+        micAlreadySilentHUD: "マイクはすでに消音されています",
         micMuteMenuBarToggle: "消音中はメニューバーに表示",
         micMuteMenuBarCaption: "メニューバーのアプリアイコンの横に、赤い斜線入りのマイクが表示されます。",
         pastePlainName: "プレーンテキストとしてペースト",

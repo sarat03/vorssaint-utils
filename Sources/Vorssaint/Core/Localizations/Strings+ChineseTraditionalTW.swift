@@ -196,6 +196,7 @@ extension Strings {
         micMuteCaption: "透過點按或快速鍵切斷 Mac 的麥克風，對所有 App 生效。",
         micMutedHUD: "麥克風已靜音",
         micUnmutedHUD: "麥克風已恢復",
+        micAlreadySilentHUD: "麥克風已處於靜音",
         micMuteMenuBarToggle: "靜音時在選單列顯示",
         micMuteMenuBarCaption: "選單列中的 App 圖示旁會出現一個紅色的劃線麥克風。",
         pastePlainName: "貼上為純文字",

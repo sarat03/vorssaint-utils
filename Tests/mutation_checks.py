@@ -32,6 +32,21 @@ MUTATIONS = [
      "        removeEventMonitors()\n        syncVisibleConsumers()\n    }\n\n    func toggle()",
      "        removeEventMonitors()\n    }\n\n    func toggle()",
      "closing manually opened controls stops the reader and never leaves a music strip behind"),
+    ("a sweep that silenced nothing still reports a mute", "core",
+     "Sources/Vorssaint/Services/QuickTools/MicMuteService.swift",
+     "            if isSilenced(device.id) {\n"
+     "                if owned.contains(device.uid) {\n"
+     "                    outcome.applied = true\n"
+     "                    outcome.mutedDevices.append(device.uid)\n"
+     "                }\n"
+     "                continue\n"
+     "            }\n",
+     "            if isSilenced(device.id) {\n"
+     "                outcome.applied = true\n"
+     "                if owned.contains(device.uid) { outcome.mutedDevices.append(device.uid) }\n"
+     "                continue\n"
+     "            }\n",
+     "a sweep that silenced nothing reports no mute, so none is recorded"),
     ("a released microphone leaves its offer standing", "core",
      "Sources/Vorssaint/Services/QuickTools/MicMuteService.swift",
      "            DispatchQueue.main.async { self?.refreshStrandedMute() }\n",

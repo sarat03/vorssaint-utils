@@ -196,6 +196,7 @@ extension Strings {
         micMuteCaption: "Mac’in mikrofonunu tek tıkla veya kısayolla keser; tüm uygulamalarda geçerlidir.",
         micMutedHUD: "Mikrofon sessize alındı",
         micUnmutedHUD: "Mikrofon yeniden açıldı",
+        micAlreadySilentHUD: "Mikrofon zaten sessiz",
         micMuteMenuBarToggle: "Sessizken menü çubuğunda göster",
         micMuteMenuBarCaption: "Menü çubuğundaki uygulama simgesinin yanında üstü çizili kırmızı bir mikrofon görünür.",
         pastePlainName: "Düz metin olarak yapıştır",

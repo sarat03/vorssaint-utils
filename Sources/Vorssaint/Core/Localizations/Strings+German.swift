@@ -196,6 +196,7 @@ extension Strings {
         micMuteCaption: "Schaltet das Mikrofon des Mac per Klick oder Kurzbefehl stumm, in jeder App.",
         micMutedHUD: "Mikrofon stumm",
         micUnmutedHUD: "Mikrofon wieder an",
+        micAlreadySilentHUD: "Mikrofon ist bereits stumm",
         micMuteMenuBarToggle: "In der Menüleiste anzeigen, solange stumm",
         micMuteMenuBarCaption: "Ein rot durchgestrichenes Mikrofon erscheint neben dem Symbol der App in der Menüleiste.",
         pastePlainName: "Als reinen Text einsetzen",
