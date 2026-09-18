@@ -79,6 +79,17 @@ MUTATIONS = [
      "        }\n",
      "        refresh(force: true)\n",
      "the picture goes back to its own curve when the choice goes off"),
+    ("a timed session hands over on one condition", "core", "Sources/Vorssaint/Services/KeepAwakeManager.swift",
+     "        guard KeepAwakeAutomationSupport.conditionsSatisfied(\n"
+     "                matching: matches,\n"
+     "                enabled: currentEnabledAutomationConditions(),\n"
+     "                requireAll: automationRequiresAllConditions()) else { return false }\n",
+     "        guard !matches.isEmpty else { return false }\n",
+     "a timer running out on battery hands nothing over to an All automation"),
+    ("match mode labels grow back into sentences", "core", "Sources/Vorssaint/Core/KeepAwakeStrings.swift",
+     "        matchAny: \"L\u2019une\",\n        matchAll: \"Toutes\",\n",
+     "        matchAny: \"N\u2019importe quelle condition\",\n        matchAll: \"Toutes les conditions\",\n",
+     "fr: the match mode labels fit the panel card"),
     ("recording metadata rebases after startup", "recording", "Sources/Vorssaint/Services/Recorder/RecorderSupport.swift",
      "return timeline.eventTime(time, since: origin)",
      "return timeline.eventTime(time, since: origin + 0.3)",

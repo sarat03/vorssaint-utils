@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-App Switcher makes multiple windows easier to see and brings selected windows forward without raising siblings. The mixer adds microphone volume, pinned apps and remembered ordering; capture guides reveal repeat-region shortcuts, Dynamic Island gets its own section in Features, can uninstall with its extensions and improves music efficiency and interaction, panel buttons align correctly, Command Bar adds emoji skin tones and reliable Keep Awake durations, recent captures open promptly from other apps, and Window Layout adds a centered two-thirds placement.
+App Switcher makes multiple windows easier to see and brings selected windows forward without raising siblings. The mixer adds microphone volume; Dynamic Island gets its own Features section, a stopwatch and bars that follow the sound; Command Bar adds emoji skin tones and a scientific calculator; the mouse wheel scrolls sideways with a held key, Keep Awake automation can require every condition, text snippets can sound on expansion and explain blocked typing, and Window Layout adds a centered two-thirds placement.
 
 ### Added
 - Uninstalling Dynamic Island offers to uninstall its extensions along with it or to keep them installed.
@@ -16,6 +16,13 @@ App Switcher makes multiple windows easier to see and brings selected windows fo
 - Command Bar offers a default emoji skin tone and one-off alternatives from each emoji’s actions. Thanks to @justin-chiam.
 - Capture guides show R to repeat the last selected area, including in Dynamic Island. Thanks to @marcelharinck.
 - Pin and reorder mixer apps, with positions remembered when apps reopen and included in settings backups.
+- Dynamic Island’s timer page offers a stopwatch that counts up with pause and cancel, keeping its seconds visible beside the camera.
+- Text snippets can play an alert sound of your choice each time a typed trigger expands. Thanks to @tenbux.
+- Keep Awake automation can require every selected condition, ending the session as soon as one stops holding. Thanks to @sarat03.
+- Snippet and Command Bar settings show which app holds secure input when typing is blocked, with a button to bring it forward. Thanks to @tenbux.
+- Command Bar's calculator completes missing brackets, adds scientific functions, constants and notation, and Tab continues from the answer. Thanks to @DarkEden-coding.
+- Scroll sideways in any app by holding a chosen key while turning the mouse wheel, installable from Features. Thanks to @cjscld.
+- Dynamic Island's music bars can follow the player's actual sound, off by default and needing system audio permission. Thanks to @ruvelro.
 
 ### Changed
 - Features lists Dynamic Island and its extensions in a section of their own instead of among the tools.
@@ -38,6 +45,8 @@ App Switcher makes multiple windows easier to see and brings selected windows fo
 - Now Playing in Dynamic Island no longer says nothing is playing while it fetches the current track. Thanks to @Yahddyyp.
 - File dialogs opened from the media tools inside Dynamic Island attach to it instead of opening behind it. Thanks to @Yahddyyp.
 - The recording editor keeps its saving indicator on one line in narrow windows. Thanks to @Yahddyyp.
+- After an in-app update, search no longer lists the app as “Vorssaint.app.update-new”. Thanks to @Yahddyyp.
+- The window layout ring keeps the aimed direction while its default shortcut is held, instead of flashing back to maximize on every key repeat. Thanks to @Borisserz.
 
 ## [3.4.0-beta.2.1] - 2026-09-16
 

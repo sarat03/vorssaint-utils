@@ -170,9 +170,8 @@ final class NotchService: ObservableObject {
                                         + geometry.systemColumns - 1) / geometry.systemColumns,
                                      capturePreviewHeight: captureContent == nil ? nil : captureContentHeight,
                                      timerHasSession: NotchTimerService.shared.session.hasSession,
-                                     timerShowsPomodoro: NotchTimerService.shared.session.hasSession
-                                        ? NotchTimerService.shared.session.mode == .pomodoro
-                                        : UserDefaults.standard.string(forKey: DefaultsKey.notchTimerMode) == NotchTimerMode.pomodoro.rawValue)
+                                     timerMode: NotchTimerService.shared.session.hasSession
+                                        ? NotchTimerService.shared.session.mode : NotchTimerSupport.savedMode())
     }
     var contentSize: CGSize { geometry.contentSize(for: expandedSize) }
     var surfaceSize: CGSize {
@@ -241,6 +240,7 @@ final class NotchService: ObservableObject {
         NotchDownloadService.shared.syncWithPreferences()
         NotchCalendarService.shared.syncWithPreferences()
         NotchNotificationService.shared.syncWithPreferences()
+        NotchAudioLevelService.shared.syncWithPreferences()
         updateScreen()
         syncGestures()
         NotchTimerService.shared.syncWithPreferences()
@@ -315,6 +315,7 @@ final class NotchService: ObservableObject {
         subscriptions.removeAll()
         stopPower()
         NotchMusicService.shared.stop()
+        NotchAudioLevelService.shared.stop()
         CameraPreviewService.shared.hideEmbedded()
         NotchAccessoryService.shared.suspend()
         NotchDownloadService.shared.stop()
