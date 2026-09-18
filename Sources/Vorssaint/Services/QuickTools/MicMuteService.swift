@@ -22,9 +22,11 @@ final class MicMuteService: ObservableObject {
     @Published private(set) var shortcutRegistrationFailed = false
 
     private let hotkey = QuickToolHotkey(id: 12)
-    private var didReleaseOrphanedMutes = false
+    /// Whether a microphone is silent while the app believes it muted nothing.
+    /// Drives the offer in the panel; never acted on without a click.
+    @Published private(set) var hasStrandedMute = false
     /// A mute nobody can see is the whole difficulty of issue #1568, so the
-    /// one sweep that changes hardware state without a click says so.
+    /// sweep that opens one says which device it opened and whether it worked.
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "vorssaint",
                                     category: "micmute")
     private var installedListeners: [AudioObjectPropertySelector] = []
@@ -84,32 +86,41 @@ final class MicMuteService: ObservableObject {
             isMuted = false
         }
         syncListeners()
-        releaseOrphanedMutesOnce()
+        refreshStrandedMute()
     }
 
-    /// Runs once per launch, and only while the app believes nothing is muted:
-    /// a mute left behind by a previous run is invisible to the normal unmute,
-    /// whose record was already cleared. Only the mute switch is reconciled, as
-    /// that is the path a voice processing session interferes with; a level left
-    /// at zero keeps its saved value and is restored the usual way.
-    private func releaseOrphanedMutesOnce() {
-        guard !didReleaseOrphanedMutes else { return }
-        didReleaseOrphanedMutes = true
-        guard !isMuted else { return }
-        let defaults = UserDefaults.standard
-        let touched = defaults.stringArray(forKey: DefaultsKey.micMuteTouchedDevices) ?? []
-        guard !touched.isEmpty else { return }
-        let claimed = defaults.stringArray(forKey: DefaultsKey.micMuteMutedDevices)
-        halQueue.async {
-            let devices = Self.inputDevices()
-            let silenced = devices.filter { Self.muteSwitchValue(of: $0.id) == 1 }.map(\.uid)
-            let targets = Set(MicMuteSupport.orphanedMuteTargets(touched: touched,
-                                                                claimed: claimed,
-                                                                silenced: silenced))
-            for device in devices where targets.contains(device.uid) {
-                let released = Self.setMuteSwitch(false, of: device.id)
-                Self.log.log("released orphaned mic mute on \(device.uid, privacy: .public) ok \(released)")
+    /// A microphone left silent with nothing claiming it. The app cannot tell
+    /// its own forgotten mute from one the person made in System Settings, so
+    /// it never opens anything on its own: it says so and offers the way back
+    /// (issue #1568). A voice processing session clears the mute switch for
+    /// its own duration and restores the value it found when it ends, so a
+    /// mute released while such a session was open comes back with the claim
+    /// already dropped, which is how a mute outlives the record of it.
+    func refreshStrandedMute() {
+        guard !isMuted else {
+            if hasStrandedMute { hasStrandedMute = false }
+            return
+        }
+        halQueue.async { [weak self] in
+            let stranded = Self.inputDevices().contains { Self.muteSwitchValue(of: $0.id) == 1 }
+            DispatchQueue.main.async {
+                guard let self, !self.isMuted else { return }
+                if self.hasStrandedMute != stranded { self.hasStrandedMute = stranded }
             }
+        }
+    }
+
+    /// Opens every input device whose mute switch is on. Only ever from a
+    /// direct request: with no record to go by this can also open a microphone
+    /// silenced in System Settings, which is the person's call to make each
+    /// time and never a standing permission the app keeps.
+    func releaseStrandedMute() {
+        halQueue.async { [weak self] in
+            for device in Self.inputDevices() where Self.muteSwitchValue(of: device.id) == 1 {
+                let released = Self.setMuteSwitch(false, of: device.id)
+                Self.log.log("released stranded mic mute on \(device.uid, privacy: .public) ok \(released)")
+            }
+            DispatchQueue.main.async { self?.refreshStrandedMute() }
         }
     }
 
@@ -202,17 +213,12 @@ final class MicMuteService: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.set(outcome.savedVolumes, forKey: DefaultsKey.micMuteSavedVolumes)
         defaults.set(outcome.mutedDevices, forKey: DefaultsKey.micMuteMutedDevices)
-        if muted, !outcome.mutedDevices.isEmpty {
-            let stored = defaults.stringArray(forKey: DefaultsKey.micMuteTouchedDevices) ?? []
-            let updated = MicMuteSupport.updatedTouchedDevices(stored, adding: outcome.mutedDevices)
-            if updated != stored {
-                defaults.set(updated, forKey: DefaultsKey.micMuteTouchedDevices)
-            }
-        }
-
         if isMuted != muted { isMuted = muted }
         defaults.set(muted, forKey: DefaultsKey.micMuteActive)
         syncListeners()
+        // A sweep that could not open everything it was asked to is exactly
+        // when the offer has to appear, so the state is re-read after each one.
+        refreshStrandedMute()
         guard announce else { return }
         QuickToolHUD.show(icon: muted ? "mic.slash.fill" : "mic.fill",
                           message: muted ? L10n.shared.s.micMutedHUD : L10n.shared.s.micUnmutedHUD)

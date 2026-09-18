@@ -192,6 +192,10 @@ struct QuickTogglesList: View {
                            showsDragHandle: true,
                            visibility: visibilityBinding(item))
         case .micMute:
+            // A microphone left silent with nothing claiming it gets an offer
+            // rather than a silent sweep: the app cannot tell its own lost mute
+            // from one made in System Settings, so the person decides, and can
+            // decide again whenever it happens (issue #1568).
             UtilityActionButton(title: micMute.isMuted ? l10n.s.micUnmuteName : l10n.s.micMuteName,
                                 caption: l10n.s.micMuteCaption,
                                 systemImage: micMute.isMuted ? "mic.slash.fill" : "mic",
@@ -199,9 +203,14 @@ struct QuickTogglesList: View {
                                 showsDragHandle: true,
                                 visibility: $showMicMute,
                                 shortcutHint: shortcutHint(.micMute),
+                                accessoryTitle: micMute.hasStrandedMute ? l10n.s.micUnmuteName : nil,
+                                accessorySystemImage: micMute.hasStrandedMute ? "mic" : nil,
+                                accessoryAction: micMute.hasStrandedMute
+                                    ? { MicMuteService.shared.releaseStrandedMute() } : nil,
                                 action: {
                                     MicMuteService.shared.toggle()
                                 })
+                .onAppear { MicMuteService.shared.refreshStrandedMute() }
         case .emptyTrash:
             UtilityActionButton(title: strings.emptyTrashTitle,
                                 caption: caption(for: item, idle: strings.emptyTrashCaption),

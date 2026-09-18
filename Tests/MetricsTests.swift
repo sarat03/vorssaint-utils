@@ -19,7 +19,10 @@ struct MetricsTests {
         let suite = TestSuite()
         let groups: [(String, () -> Void)] = [
             ("harness", { TestHarnessTests.run(suite) }),
-            ("core", { coreChecks(suite) }),
+            ("core", {
+                coreChecks(suite)
+                MicMuteStrandedTests.run { suite.expect($0, $1) }
+            }),
             ("capture", { ScreenshotSelectionRefreshContract.run(suite) }),
             ("keyboard", {
                 assistiveKeyboardChecks { suite.expect($0, $1) }
@@ -19979,30 +19982,9 @@ struct MetricsTests {
                 && MicMuteSupport.restoreTargets(recorded: ["mic-a"], present: []).isEmpty,
                "unmuting touches the microphones this app muted, every one with no record, and none when the record is empty")
 
-        // Orphaned mutes: a device this app silenced before, silent now and
-        // claimed by nothing, is its own to release (issue #1568).
-        expect(MicMuteSupport.orphanedMuteTargets(touched: ["mic-a"],
-                                                  claimed: [],
-                                                  silenced: ["mic-a"]) == ["mic-a"],
-               "a mute with an empty claim list on a device this app muted before is an orphan")
-        expect(MicMuteSupport.orphanedMuteTargets(touched: ["mic-a"],
-                                                  claimed: ["mic-a"],
-                                                  silenced: ["mic-a"]) == [],
-               "a mute this app still claims is released by the normal unmute, not here")
-        expect(MicMuteSupport.orphanedMuteTargets(touched: [],
-                                                  claimed: [],
-                                                  silenced: ["mic-a"]) == [],
-               "a microphone this app never muted is left alone")
-        expect(MicMuteSupport.orphanedMuteTargets(touched: ["mic-a"],
-                                                  claimed: [],
-                                                  silenced: []) == [],
-               "nothing is released on a device that is not silent")
-        expect(MicMuteSupport.updatedTouchedDevices(["mic-a"], adding: ["mic-b"]) == ["mic-a", "mic-b"],
-               "a newly muted device joins the record")
-        expect(MicMuteSupport.updatedTouchedDevices(["mic-a", "mic-b"], adding: ["mic-a"]) == ["mic-b", "mic-a"],
-               "re-muting a known device moves it to the end rather than duplicating it")
-        expect(MicMuteSupport.updatedTouchedDevices(["a", "b", "c"], adding: ["d"], limit: 3) == ["b", "c", "d"],
-               "the record stays bounded, dropping the oldest device")
+        // A microphone left silent with nothing claiming it is offered a way
+        // out rather than opened behind the person's back (issue #1568); the
+        // rules are in MicMuteStrandedTests, against the service itself.
         expect(Defaults.registeredDefaults[DefaultsKey.radialMenuEnabled] as? Bool == false,
                "the radial menu ships off by default")
         expect(Defaults.registeredDefaults[DefaultsKey.radialMenuShortcut] as? String

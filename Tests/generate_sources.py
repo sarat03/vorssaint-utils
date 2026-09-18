@@ -363,6 +363,25 @@ def main():
           + "}\n}\nextension NotchMusicAutomationFlowContract.NotchMusicAutomation {\n"
           + declaration("Sources/Vorssaint/Services/Notch/NotchMusicAutomation.swift", "    static func send(") + "}\n")
 
+    mic_mute = "Sources/Vorssaint/Services/QuickTools/MicMuteService.swift"
+    write("MicMuteStranded.swift", "import Foundation\nimport os\n\nextension MicMuteStrandedContract {\n"
+          + "final class Service {\nvar isMuted = false\nvar hasStrandedMute = false\n"
+          + "let halQueue = Queue()\n"
+          + "static let log = Logger(subsystem: \"vorss.tests.micmute\", category: \"micmute\")\n"
+          + "static func inputDevices() -> [Device] { MicMuteStrandedContract.devices }\n"
+          + "static func muteSwitchValue(of id: Int) -> Int? {\n"
+          + "MicMuteStrandedContract.devices.first { $0.id == id }?.muteSwitch\n}\n"
+          + "static func setMuteSwitch(_ muted: Bool, of id: Int) -> Bool {\n"
+          + "guard let index = MicMuteStrandedContract.devices.firstIndex(where: { $0.id == id })\n"
+          + "else { return false }\n"
+          + "let device = MicMuteStrandedContract.devices[index]\n"
+          + "MicMuteStrandedContract.writes.append((device.uid, muted))\n"
+          + "guard device.uid != MicMuteStrandedContract.refusing else { return false }\n"
+          + "MicMuteStrandedContract.devices[index].muteSwitch = muted ? 1 : 0\nreturn true\n}\n"
+          + declaration(mic_mute, "    func refreshStrandedMute()")
+          + declaration(mic_mute, "    func releaseStrandedMute()")
+          + "}\n}\n")
+
     downloads = "Sources/Vorssaint/Services/Notch/NotchDownloadService.swift"
     write("NotchDownloadFolderChoice.swift", "import Foundation\n\nextension NotchDownloadFolderChoiceContract {\n"
           + "final class Service {\nvar chooser: NSOpenPanel?\nvar chooserID = UUID()\n"
