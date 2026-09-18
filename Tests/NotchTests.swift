@@ -3,8 +3,63 @@
 
 import Foundation
 import CoreGraphics
+import AppKit
 
 enum NotchTests {
+    private static func noticeLayoutContracts(expect: (Bool, String) -> Void) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        func width(_ text: String) -> CGFloat {
+            (text as NSString).size(withAttributes: [.font: font]).width
+        }
+        let screen = CGRect(x: -1470, y: 100, width: 1470, height: 956)
+        for language in AppLanguage.allCases {
+            let text = FeatureStrings.notch(language)
+            let activities = FeatureStrings.notchActivities(language)
+            let notices = [text.onBattery, text.charging, text.charged, text.lowBattery].map {
+                NotchNotice(event: .battery, title: $0, detail: "100%", symbol: "battery.100percent.bolt")
+            } + [NotchNotice(event: .accessory, title: "Wireless Headphones", detail: activities.connected, symbol: "headphones"),
+                 NotchNotice(event: .accessory, title: "Wireless Keyboard", detail: activities.lowBattery + " · 15%",
+                             symbol: "keyboard", level: 0.15)]
+            for physical in [false, true] {
+                for height: CGFloat in [16, 24, 32, 40, 64] {
+                    let geometry = NotchGeometry(screen: screen, safeAreaTop: physical ? height : 0,
+                                                 cameraWidth: physical ? 180 : 0, menuBarHeight: height)
+                    for notice in notices {
+                        let wing = geometry.noticeWingWidth(preferred: notice.preferredWingWidth)
+                        let content = wing - 32
+                        expect(width(notice.level == nil ? notice.title : notice.detail) + 18 + 8 <= content,
+                               "power and accessory labels fit beside their icon without truncation in \(language)")
+                        expect(notice.level != nil || width(notice.detail) <= content,
+                               "connection status and charge percentage fit the opposite wing in \(language)")
+                        let size = geometry.noticeSize(wingWidth: notice.preferredWingWidth)
+                        expect(size.width == wing * 2 + geometry.cameraWidth && size.height == height
+                               && screen.contains(geometry.frame(for: size)),
+                               "content-sized notices preserve camera clearance, menu height and display bounds")
+                    }
+                }
+            }
+        }
+        for event in [NotchEvent.volume, .brightness, .keyboardLight] {
+            for percent in 0...100 {
+                let notice = NotchNotice(event: event, title: "Level", detail: "\(percent)%",
+                                         symbol: "speaker.wave.2", level: Double(percent) / 100)
+                expect(notice.preferredWingWidth == 112, "level changes keep a stable compact width")
+            }
+        }
+        let long = NotchNotice(event: .accessory, title: String(repeating: "Device ", count: 100),
+                               detail: "Connected", symbol: "headphones")
+        expect(long.preferredWingWidth <= 240 && long.accessibilityText.contains(long.title),
+               "very long device names have bounded visual width and retain their full accessible name")
+        let narrow = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 640, height: 480),
+                                   safeAreaTop: 32, cameraWidth: 210)
+        let size = narrow.noticeSize(wingWidth: long.preferredWingWidth)
+        expect(size.width <= narrow.screen.width - 24 && size.height == narrow.menuBarHeight,
+               "long device names cannot push a notice past a narrow display")
+        let notification = NotchNotice(event: .systemNotification, title: "Notice", detail: "Body", symbol: "bell",
+            notification: NotchNotificationContent(app: "App", title: "Notice", subtitle: "", body: "Body"))
+        expect(notification.preferredWingWidth == 190, "mirrored notifications keep their existing text layout")
+    }
+
     private static func simulatedMenuBoundsContracts(expect: (Bool, String) -> Void) {
         let screen = CGRect(x: -1470, y: 100, width: 1470, height: 956)
         for height: CGFloat in [16, 22, 24, 32, 40, 64] {
@@ -13,7 +68,7 @@ enum NotchTests {
                 let geometry = NotchGeometry(screen: screen, safeAreaTop: 0, cameraWidth: 0,
                                              menuBarHeight: height, compactSideRoom: room)
                 let sizes = [geometry.restingSize(showsContent: false), geometry.collapsed,
-                             geometry.notice, geometry.noticeSize(notification: true),
+                             geometry.notice, geometry.noticeSize(wingWidth: 190),
                              geometry.compactMusicGeometry.compactActivitySize,
                              geometry.compactTimerGeometry(showsDownloads: false).compactActivitySize,
                              geometry.compactTimerGeometry(showsDownloads: true).compactActivitySize,
@@ -60,7 +115,7 @@ enum NotchTests {
                            && geometry.notice == physical.notice && geometry.expanded == physical.expanded,
                            "idle, feedback and expanded simulations use the same proportions as a physical cutout")
                     let sizes = [geometry.restingSize(showsContent: false), geometry.collapsed, geometry.peek,
-                                 geometry.notice, geometry.noticeSize(notification: true)]
+                                 geometry.notice, geometry.noticeSize(wingWidth: 190)]
                         + NotchModule.allCases.map { geometry.expandedSize(module: $0) }
                         + [geometry.sectionPickerSize(count: NotchModule.allCases.count)]
                     for size in sizes {
@@ -178,17 +233,22 @@ enum NotchTests {
     }
 
     static func run(expect: (Bool, String) -> Void) {
+        noticeLayoutContracts(expect: expect)
         simulatedMenuBoundsContracts(expect: expect)
         simulatedDisplayContracts(expect: expect)
         menuSpaceReuseContracts(expect: expect)
         menuBarHeightContracts(expect: expect)
         musicLabelContracts(expect: expect)
+        NotchPanelTests.run(expect: expect)
         NotchHoverTests.run(expect: expect)
         NotchScreenEdgeClickTests.run(expect: expect)
         NotchPresentationRefreshContract.run(expect: expect)
         NotchScreenRefreshContract.run(expect: expect)
         NotchDestinationContract.run(expect: expect)
         NotchMusicVisibilityTests.run(expect: expect)
+        NotchEqualizerTests.run(expect: expect)
+        NotchLyricsTimelineTests.run(expect: expect)
+        NotchUpdateTests.run(expect: expect)
         NotchCaptureKeyboardTests.run(expect: expect)
         NotchDownloadProgressTests.run(expect: expect)
         NotchSliderEditingTests.run(expect: expect)
@@ -263,6 +323,17 @@ enum NotchTests {
                && defaults.bool(forKey: DefaultsKey.notchOpenOnHover)
                && defaults.bool(forKey: DefaultsKey.notchHoverExpands),
                "a new island starts spacious and expands on hover")
+        expect(!defaults.bool(forKey: DefaultsKey.notchHideUntilHover), "hidden hover is opt-in")
+        expect(defaults.double(forKey: DefaultsKey.notchHoverDelay) == 0.25,
+               "hover activation defaults to a deliberate quarter-second pause")
+        for value in [0.10, 0.25, 0.65, 1.0] {
+            expect(NotchSupport.sanitizedHoverDelay(value) == value, "valid hover activation times are preserved")
+        }
+        expect(NotchSupport.sanitizedHoverDelay(-1) == 0.10
+               && NotchSupport.sanitizedHoverDelay(9) == 1.0,
+               "hover activation times stay within usable bounds")
+        expect([Double.nan, .infinity, -.infinity].allSatisfy { NotchSupport.sanitizedHoverDelay($0) == 0.25 },
+               "non-finite hover activation times fall back to the default")
         expect(NotchSupport.routesAppPanel(in: defaults) && NotchSupport.routesQuickPanel(in: defaults)
                && NotchSupport.routesClipboardWindow(in: defaults) && NotchSupport.routesShelf(in: defaults)
                && NotchSupport.routesCaptureControls(in: defaults),
@@ -488,7 +559,7 @@ enum NotchTests {
                                 DefaultsKey.notchCustomWidth, DefaultsKey.notchCustomHeight, DefaultsKey.notchHapticFeedback,
                                 DefaultsKey.notchCaptureControls, DefaultsKey.notchQuickPanel, DefaultsKey.notchAppPanel,
                                 DefaultsKey.notchHoverExpands, DefaultsKey.notchEnabled, DefaultsKey.notchDisplay,
-                                DefaultsKey.notchOpenOnHover, DefaultsKey.notchHiddenModules,
+                                DefaultsKey.notchOpenOnHover, DefaultsKey.notchHoverDelay, DefaultsKey.notchHideUntilHover, DefaultsKey.notchHiddenModules,
                                 DefaultsKey.notchModuleOrder, DefaultsKey.notchQuickAccessLayout, DefaultsKey.notchQuickAccessSide, DefaultsKey.notchQuickAccessSecond, DefaultsKey.notchQuickAccessThird, DefaultsKey.notchVolume,
                                 DefaultsKey.notchBrightness, DefaultsKey.notchBattery,
                                 DefaultsKey.notchClipboard, DefaultsKey.notchClipboardWindow, DefaultsKey.notchCapture,
@@ -698,7 +769,7 @@ enum NotchTests {
             for notch in [false, true] {
                 let geometry = NotchGeometry(screen: frame, safeAreaTop: notch ? 32 : 0,
                                              cameraWidth: notch ? 210 : 0)
-                for size in [geometry.collapsed, geometry.notice, geometry.noticeSize(notification: true), geometry.expanded] {
+                for size in [geometry.collapsed, geometry.notice, geometry.noticeSize(wingWidth: 190), geometry.expanded] {
                     let positioned = geometry.frame(for: size)
                     expect(frame.contains(positioned), "notch fits displays in every coordinate quadrant")
                     expect(positioned.midX == frame.midX, "notch stays centered while morphing")
@@ -757,7 +828,7 @@ enum NotchTests {
                "an indicator is omitted when there is not enough room to render it intact")
         let roomy = NotchGeometry(screen: menuScreen, safeAreaTop: 32, cameraWidth: 180,
                                  menuBarHeight: 24, compactSideRoom: 100)
-        let notificationSize = roomy.noticeSize(notification: true)
+        let notificationSize = roomy.noticeSize(wingWidth: 190)
         expect(notificationSize.height == roomy.menuBarHeight && roomy.notice.height == notificationSize.height
                && notificationSize.width > roomy.notice.width,
                "notifications use wider wings than level feedback without growing below the menu bar")
@@ -766,9 +837,9 @@ enum NotchTests {
                 for barHeight: CGFloat in [16, 24, 32, 40, 64] {
                     let geometry = NotchGeometry(screen: frame, safeAreaTop: notched ? 32 : 0,
                         cameraWidth: notched ? 210 : 0, menuBarHeight: barHeight)
-                    for notification in [false, true] {
-                        let size = geometry.noticeSize(notification: notification)
-                        let wings = geometry.noticeWingWidth(notification: notification)
+                    for wing in [CGFloat(112), 190, 240] {
+                        let size = geometry.noticeSize(wingWidth: wing)
+                        let wings = geometry.noticeWingWidth(preferred: wing)
                         expect(size.height == geometry.menuBarHeight
                                && geometry.frame(for: size).maxY == frame.maxY,
                                "feedback preserves the same camera clearance on physical and simulated notches")
@@ -874,23 +945,28 @@ enum NotchTests {
                        "the capture preview preserves the screen edge and respects the custom height limit")
             }
         }
-        let regularFiles = mediaGeometry.expandedSize(module: .files)
-        let fileMedia = mediaGeometry.expandedSize(module: .files, fileMediaVisible: true)
-        expect(mediaGeometry.contentSize(for: fileMedia).height == 600 && fileMedia.height > regularFiles.height,
-               "opening the embedded media workspace gives previews, settings and actions six hundred useful points")
-        expect(mediaGeometry.expandedSize(module: .music, fileMediaVisible: true)
+        for layout in NotchSize.allCases {
+            let fitting = NotchGeometry(screen: menuScreen, safeAreaTop: 32, cameraWidth: 180,
+                                        layout: layout, customHeight: 640)
+            for measured: CGFloat in [120, 280, 370, 480] {
+                let fileMedia = fitting.expandedSize(module: .files, fileMediaHeight: measured)
+                expect(fitting.contentSize(for: fileMedia).height == measured,
+                       "embedded media fits its measured content without adding a fixed blank area")
+            }
+        }
+        expect(mediaGeometry.expandedSize(module: .music, fileMediaHeight: 600)
                == mediaGeometry.expandedSize(module: .music),
                "an open file-media session does not enlarge unrelated notch modules")
         for height in [400.0, 520.0, 640.0] {
             let custom = NotchGeometry(screen: menuScreen, safeAreaTop: 32, cameraWidth: 180,
                                         layout: .custom, customHeight: height)
-            let target = custom.expandedSize(module: .files, fileMediaVisible: true)
+            let target = custom.expandedSize(module: .files, fileMediaHeight: 600)
             expect(target.height <= height && menuScreen.contains(custom.frame(for: target)),
                    "the embedded media workspace respects the user's custom height")
         }
         let shortScreen = CGRect(x: 0, y: 0, width: 1024, height: 600)
         let shortMedia = NotchGeometry(screen: shortScreen, safeAreaTop: 0, cameraWidth: 0)
-        let shortTarget = shortMedia.expandedSize(module: .files, fileMediaVisible: true)
+        let shortTarget = shortMedia.expandedSize(module: .files, fileMediaHeight: 600)
         expect(shortTarget.height <= shortScreen.height - 48 && shortScreen.contains(shortMedia.frame(for: shortTarget)),
                "the larger media workspace preserves the screen margin on shorter displays")
         expect(NotchSupport.screenIndex(preference: .automatic, builtIn: [false, true],
