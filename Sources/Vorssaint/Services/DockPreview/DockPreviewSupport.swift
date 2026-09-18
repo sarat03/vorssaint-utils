@@ -19,6 +19,15 @@ enum DockPreviewOrientation: String, Equatable {
     }
 }
 
+/// What is left to do with a running app whose windows are all closed. The
+/// Dock's own right-click menu offers these three; the hover panel offers them
+/// where it would otherwise show nothing at all.
+enum DockPreviewWindowlessAction: String, CaseIterable {
+    case open
+    case hide
+    case quit
+}
+
 struct DockPreviewPreferences: Equatable {
     let orientation: DockPreviewOrientation
     let autohide: Bool
@@ -483,6 +492,31 @@ enum DockPreviewSupport {
                            min(screenVisibleFrame.width * 0.9,
                                screenVisibleFrame.width - edgePadding * 2))
         return CGSize(width: min(run, maxWidth), height: cardHeight + padding * 2 + header)
+    }
+
+    /// The action panel is one row of buttons rather than a run of cards, so it
+    /// is sized by its own content and only clamped to the screen. It follows
+    /// the preview size setting upward, like every other box in the panel, but
+    /// never below the room its labels need: those are fixed-size text, as they
+    /// are on a card, and a smaller preview setting does not make them shorter.
+    /// ponytail: a floor rather than a measured fit. Only a real layout pass
+    /// would know how wide a given language draws these three labels; if one
+    /// turns out to clip, measure the row instead of widening the constant.
+    static let windowlessPanelWidth: CGFloat = 360
+    static let windowlessPanelHeight: CGFloat = 52
+    static var windowlessScale: CGFloat { windowlessScale(previewScale: PreviewSizing.scale) }
+
+    static func windowlessScale(previewScale: CGFloat) -> CGFloat {
+        max(1, previewScale)
+    }
+
+    static func windowlessPanelSize(screenVisibleFrame: CGRect,
+                                    previewScale: CGFloat = PreviewSizing.scale) -> CGSize {
+        let scale = windowlessScale(previewScale: previewScale)
+        return CGSize(width: min(windowlessPanelWidth * scale,
+                                 max(1, screenVisibleFrame.width - edgePadding * 2)),
+                      height: min(windowlessPanelHeight * scale,
+                                  max(1, screenVisibleFrame.height - edgePadding * 2)))
     }
 
     static func windowPositionText(selectedWindowID: CGWindowID?, windowIDs: [CGWindowID]) -> String? {

@@ -86,6 +86,18 @@ def main():
           + declaration("Sources/Vorssaint/Services/Switcher/WindowEnumerator.swift",
                         "    static func dockPreviewMayActivate(")
           + "}\n")
+    support = "Sources/Vorssaint/Services/DockPreview/DockPreviewSupport.swift"
+    write("DockPreviewWindowless.swift", "import Foundation\nimport CoreGraphics\n"
+          + "extension DockPreviewWindowlessTests {\n"
+          + declaration(support, "enum DockPreviewWindowlessAction:")
+          + "}\nextension DockPreviewWindowlessTests.Support {\n"
+          + "".join(declaration(support, prefix) for prefix in [
+              "    static func windowlessScale(", "    static func windowlessPanelSize("])
+          + "}\nextension DockPreviewWindowlessTests.Service {\n"
+          + "".join(declaration(dock, prefix).replace("private func", "func", 1)
+                    for prefix in ["    func performWindowlessAction(",
+                                   "    private func perform("])
+          + "}\n")
     # Entire input/mute services retain their production control flow. Only
     # visibility, scheduling, defaults and HAL transport are replaced by fixtures.
     input_source = "Sources/Vorssaint/Services/Audio/AudioInputDeviceManager.swift"

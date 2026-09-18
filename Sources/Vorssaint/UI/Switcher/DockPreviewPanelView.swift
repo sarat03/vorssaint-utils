@@ -8,6 +8,14 @@ struct DockPreviewPanelView: View {
     @ObservedObject var service: DockPreviewService
 
     var body: some View {
+        if let app = service.windowlessApp {
+            DockPreviewWindowlessActionsView(app: app, onAction: service.performWindowlessAction)
+        } else {
+            windowCards
+        }
+    }
+
+    private var windowCards: some View {
         DockPreviewPanelContent(
             windows: service.windows,
             previews: service.previews,
@@ -59,6 +67,85 @@ struct DockPreviewPinnedPanelView: View {
             onUpdateDrag: {},
             onEndDrag: { _ in }
         )
+    }
+}
+
+/// The panel a running app with no windows gets: who it is, and the three
+/// things the Dock's own right-click menu would let you do with it.
+private struct DockPreviewWindowlessActionsView: View {
+    let app: NSRunningApplication
+    let onAction: (DockPreviewWindowlessAction) -> Void
+
+    @ObservedObject private var l10n = L10n.shared
+    @AppStorage(DefaultsKey.dockPreviewBackgroundOpacity) private var backgroundOpacity = 1.0
+
+    private var scale: CGFloat { DockPreviewSupport.windowlessScale }
+
+    var body: some View {
+        HStack(spacing: 8 * scale) {
+            if let icon = app.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 26 * scale, height: 26 * scale)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(app.localizedName ?? "")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Text(l10n.s.switcherNoOpenWindow)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            button(.open, title: l10n.s.dockPreviewOpenWindow, symbol: "macwindow.badge.plus")
+            button(.hide, title: l10n.s.switcherMinimizedPlacementHidden, symbol: "eye.slash")
+            button(.quit, title: l10n.s.panelQuit, symbol: "power")
+        }
+        .padding(.horizontal, 12 * scale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HUDBackdrop(cornerRadius: 18,
+                                opacity: DockPreviewSupport.sanitizedBackgroundOpacity(backgroundOpacity)))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func button(_ action: DockPreviewWindowlessAction, title: String, symbol: String) -> some View {
+        DockPreviewWindowlessActionButton(title: title, symbol: symbol) { onAction(action) }
+    }
+}
+
+private struct DockPreviewWindowlessActionButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    private var scale: CGFloat { DockPreviewSupport.windowlessScale }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8 * scale)
+            .frame(height: 24 * scale)
+            .background(
+                RoundedRectangle(cornerRadius: 7 * scale, style: .continuous)
+                    .fill(Color.primary.opacity(isHovering ? 0.16 : 0.08))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(title)
     }
 }
 

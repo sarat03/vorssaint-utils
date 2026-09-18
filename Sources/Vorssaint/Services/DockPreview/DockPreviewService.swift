@@ -27,6 +27,9 @@ final class DockPreviewService: ObservableObject {
     @Published private(set) var previews: [CGWindowID: CGImage] = [:]
     @Published private(set) var selectedWindowID: CGWindowID?
     @Published private(set) var currentAppName: String?
+    /// The app of a panel opened on a running app with no windows. Non-nil only
+    /// for those sessions, where the panel carries app actions instead of cards.
+    @Published private(set) var windowlessApp: NSRunningApplication?
     @Published private(set) var isPinned = false
     /// Which edge the Dock is on, so the panel can run its cards along it.
     @Published private(set) var orientation: DockPreviewOrientation = .bottom
@@ -206,6 +209,39 @@ final class DockPreviewService: ObservableObject {
     func closePreviewPanel() {
         guard isVisible else { return }
         endSession()
+    }
+
+    /// Run one of the actions offered for an app with no windows. The panel goes
+    /// first: every one of these either brings a window forward or takes the app
+    /// away, and none of them leaves anything the panel could still describe.
+    func performWindowlessAction(_ action: DockPreviewWindowlessAction) {
+        guard let app = windowlessApp else { return }
+        endSession()
+        perform(action, on: app)
+    }
+
+    private func perform(_ action: DockPreviewWindowlessAction, on app: NSRunningApplication) {
+        switch action {
+        case .open:
+            app.unhide()
+            // Activating an app that has no windows only moves focus to its
+            // menu bar. Re-opening it is what puts a window back on screen,
+            // which is what clicking the Dock icon would have done.
+            guard let bundleURL = app.bundleURL else {
+                app.activate()
+                return
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+        case .hide:
+            app.hide()
+        case .quit:
+            // ponytail: a plain quit, so an app with unsaved work still gets to
+            // put its own dialog up. Force quit belongs behind a modifier if
+            // anyone asks for it.
+            app.terminate()
+        }
     }
 
     func closeWindow(_ item: SwitcherItem) {
@@ -730,9 +766,12 @@ final class DockPreviewService: ObservableObject {
         cancelPendingHide()
 
         let list = prefetched ?? Self.previewableWindows(for: hit.app.processIdentifier)
-        // An app with no real windows shows nothing; if a panel is already up
-        // (the user moved here from another app), close it cleanly.
-        guard !list.isEmpty else {
+        // An app with no real windows has no cards to show, but while it is
+        // still running it is still worth acting on, so the panel offers what
+        // the Dock's own right-click menu offers. An app on its way out has
+        // nothing left to offer; if a panel is already up (the user moved here
+        // from another app), close it cleanly.
+        guard !list.isEmpty || !hit.app.isTerminated else {
             if isVisible { endSession() }
             return
         }
@@ -747,6 +786,7 @@ final class DockPreviewService: ObservableObject {
         isPinned = false
         hasEnteredPanel = false
         currentAppName = hit.app.localizedName ?? hit.app.bundleIdentifier ?? ""
+        windowlessApp = list.isEmpty ? hit.app : nil
         windows = list
         previews = Dictionary(uniqueKeysWithValues: list.compactMap { item in
             item.previewWindowID.flatMap { id in
@@ -755,9 +795,11 @@ final class DockPreviewService: ObservableObject {
         })
         selectedWindowID = nil
 
-        WindowPreviewProvider.shared.refreshPreviews(for: list, maxPixelSize: 420 * PreviewSizing.scale) { [weak self] windowID, image in
-            guard let self, self.isVisible, self.windows.contains(where: { $0.previewWindowID == windowID }) else { return }
-            self.previews[windowID] = image
+        if !list.isEmpty {
+            WindowPreviewProvider.shared.refreshPreviews(for: list, maxPixelSize: 420 * PreviewSizing.scale) { [weak self] windowID, image in
+                guard let self, self.isVisible, self.windows.contains(where: { $0.previewWindowID == windowID }) else { return }
+                self.previews[windowID] = image
+            }
         }
 
         showPanel(for: hit, itemCount: list.count)
@@ -788,6 +830,7 @@ final class DockPreviewService: ObservableObject {
         previews = [:]
         selectedWindowID = nil
         currentAppName = nil
+        windowlessApp = nil
         currentSessionPID = nil
         isPinned = false
         activePanelFrame = nil
@@ -924,10 +967,12 @@ final class DockPreviewService: ObservableObject {
     private func showPanel(for hit: DockHit, itemCount: Int) {
         let panel = ensurePanel()
         let screenVisibleFrame = visibleFrameForScreen(containing: hit.iconFrame)
-        let size = DockPreviewSupport.panelSize(itemCount: itemCount,
-                                                screenVisibleFrame: screenVisibleFrame,
-                                                isPinned: false,
-                                                orientation: hit.preferences.orientation)
+        let size = windowlessApp != nil
+            ? DockPreviewSupport.windowlessPanelSize(screenVisibleFrame: screenVisibleFrame)
+            : DockPreviewSupport.panelSize(itemCount: itemCount,
+                                           screenVisibleFrame: screenVisibleFrame,
+                                           isPinned: false,
+                                           orientation: hit.preferences.orientation)
         let gap = hit.preferences.autohide ? DockPreviewSupport.autohidePanelGap : DockPreviewSupport.panelGap
         let frame = DockPreviewSupport.panelFrame(anchor: hit.iconFrame,
                                                   panelSize: size,

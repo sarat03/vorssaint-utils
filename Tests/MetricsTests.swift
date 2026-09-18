@@ -2936,6 +2936,7 @@ struct MetricsTests {
             }
         }
         DockPreviewScopeTests.run { expect($0, $1) }
+        DockPreviewWindowlessTests.run { expect($0, $1) }
 
         // MARK: Stale surfaces without an Accessibility witness (issue #807)
 
