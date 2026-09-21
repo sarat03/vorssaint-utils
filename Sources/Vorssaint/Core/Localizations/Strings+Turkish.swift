@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "Mikrofon sessize alındı",
         micUnmutedHUD: "Mikrofon yeniden açıldı",
         micAlreadySilentHUD: "Mikrofon zaten sessiz",
+        micMuteFailedHUD: "Mikrofon sessize alınamadı",
         micMuteMenuBarToggle: "Sessizken menü çubuğunda göster",
         micMuteMenuBarCaption: "Menü çubuğundaki uygulama simgesinin yanında üstü çizili kırmızı bir mikrofon görünür.",
         pastePlainName: "Düz metin olarak yapıştır",

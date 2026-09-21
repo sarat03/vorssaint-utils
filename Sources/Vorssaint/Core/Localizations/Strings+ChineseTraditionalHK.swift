@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "麥克風已靜音",
         micUnmutedHUD: "麥克風已恢復",
         micAlreadySilentHUD: "麥克風已處於靜音",
+        micMuteFailedHUD: "無法將麥克風靜音",
         micMuteMenuBarToggle: "靜音時在選單列顯示",
         micMuteMenuBarCaption: "選單列中的 App 圖示旁會出現一個紅色的劃線麥克風。",
         pastePlainName: "貼上為純文字",

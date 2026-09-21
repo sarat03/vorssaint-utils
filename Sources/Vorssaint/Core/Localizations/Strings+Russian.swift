@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "Микрофон выключен",
         micUnmutedHUD: "Микрофон снова включён",
         micAlreadySilentHUD: "Микрофон уже отключён",
+        micMuteFailedHUD: "Не удалось отключить микрофон",
         micMuteMenuBarToggle: "Показывать в строке меню, пока микрофон выключен",
         micMuteMenuBarCaption: "Рядом со значком приложения в строке меню появляется красный перечёркнутый микрофон.",
         pastePlainName: "Вставить как обычный текст",

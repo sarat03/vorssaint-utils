@@ -365,7 +365,7 @@ def main():
 
     mic_mute = "Sources/Vorssaint/Services/QuickTools/MicMuteService.swift"
     write("MicMuteStranded.swift", "import Foundation\nimport os\n\nextension MicMuteStrandedContract {\n"
-          + "final class Service {\nvar isMuted = false\nvar hasStrandedMute = false\n"
+          + "final class Service {\nvar isMuted = false\nvar hasStrandedMute = false\nvar pendingApplies = 0\n"
           + "let halQueue = Queue()\n"
           + "static let log = Logger(subsystem: \"vorss.tests.micmute\", category: \"micmute\")\n"
           + "static func inputDevices() -> [Device] { MicMuteStrandedContract.devices }\n"

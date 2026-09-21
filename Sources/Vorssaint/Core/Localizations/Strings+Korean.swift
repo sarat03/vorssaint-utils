@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "마이크를 음소거했습니다",
         micUnmutedHUD: "마이크 음소거를 해제했습니다",
         micAlreadySilentHUD: "마이크는 이미 음소거 상태입니다",
+        micMuteFailedHUD: "마이크를 음소거할 수 없습니다",
         micMuteMenuBarToggle: "음소거 중 메뉴 막대에 표시",
         micMuteMenuBarCaption: "메뉴 막대의 앱 아이콘 옆에 빨간 줄이 그어진 마이크가 표시됩니다.",
 

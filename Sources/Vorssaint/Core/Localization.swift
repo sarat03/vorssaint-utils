@@ -318,6 +318,7 @@ struct Strings {
     let micMutedHUD: String
     let micUnmutedHUD: String
     let micAlreadySilentHUD: String
+    let micMuteFailedHUD: String
     let micMuteMenuBarToggle: String
     let micMuteMenuBarCaption: String
     let pastePlainName: String
@@ -1364,6 +1365,7 @@ extension Strings {
         micMutedHUD: "Microfone silenciado",
         micUnmutedHUD: "Microfone reativado",
         micAlreadySilentHUD: "O microfone já está silenciado",
+        micMuteFailedHUD: "Não foi possível silenciar o microfone",
         micMuteMenuBarToggle: "Mostrar na barra de menus enquanto silenciado",
         micMuteMenuBarCaption: "Um microfone cortado em vermelho aparece ao lado do ícone do app na barra de menus.",
         pastePlainName: "Colar como texto puro",
@@ -2377,6 +2379,7 @@ extension Strings {
         micMutedHUD: "Microphone muted",
         micUnmutedHUD: "Microphone back on",
         micAlreadySilentHUD: "Microphone is already silent",
+        micMuteFailedHUD: "Could not mute the microphone",
         micMuteMenuBarToggle: "Show in the menu bar while muted",
         micMuteMenuBarCaption: "A red crossed-out mic appears beside the app’s icon in the menu bar.",
         pastePlainName: "Paste as plain text",

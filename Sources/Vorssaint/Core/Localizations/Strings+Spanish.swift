@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "Micrófono silenciado",
         micUnmutedHUD: "Micrófono reactivado",
         micAlreadySilentHUD: "El micrófono ya está silenciado",
+        micMuteFailedHUD: "No se pudo silenciar el micrófono",
         micMuteMenuBarToggle: "Mostrar en la barra de menús mientras está silenciado",
         micMuteMenuBarCaption: "Un micrófono tachado en rojo aparece junto al icono de la app en la barra de menús.",
         pastePlainName: "Pegar como texto sin formato",

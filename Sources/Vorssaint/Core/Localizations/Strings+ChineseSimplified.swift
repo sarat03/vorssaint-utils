@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "麦克风已静音",
         micUnmutedHUD: "麦克风已恢复",
         micAlreadySilentHUD: "麦克风已处于静音",
+        micMuteFailedHUD: "无法静音麦克风",
         micMuteMenuBarToggle: "静音时在菜单栏显示",
         micMuteMenuBarCaption: "菜单栏中的 App 图标旁会出现一个红色的划线麦克风。",
         pastePlainName: "粘贴为纯文本",

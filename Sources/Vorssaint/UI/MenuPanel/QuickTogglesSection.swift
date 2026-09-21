@@ -196,9 +196,14 @@ struct QuickTogglesList: View {
             // rather than a silent sweep: the app cannot tell its own lost mute
             // from one made in System Settings, so the person decides, and can
             // decide again whenever it happens (issue #1568).
-            UtilityActionButton(title: micMute.isMuted ? l10n.s.micUnmuteName : l10n.s.micMuteName,
+            // While the offer is up the microphone is silent, so the row says
+            // so: a mute button above an unmute button read as a contradiction.
+            UtilityActionButton(title: micMute.hasStrandedMute
+                                    ? l10n.s.micAlreadySilentHUD
+                                    : (micMute.isMuted ? l10n.s.micUnmuteName : l10n.s.micMuteName),
                                 caption: l10n.s.micMuteCaption,
-                                systemImage: micMute.isMuted ? "mic.slash.fill" : "mic",
+                                systemImage: micMute.isMuted || micMute.hasStrandedMute
+                                    ? "mic.slash.fill" : "mic",
                                 isEditing: editing,
                                 showsDragHandle: true,
                                 visibility: $showMicMute,

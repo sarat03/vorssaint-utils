@@ -19982,9 +19982,6 @@ struct MetricsTests {
                 && MicMuteSupport.restoreTargets(recorded: ["mic-a"], present: []).isEmpty,
                "unmuting touches the microphones this app muted, every one with no record, and none when the record is empty")
 
-        // A microphone left silent with nothing claiming it is offered a way
-        // out rather than opened behind the person's back (issue #1568); the
-        // rules are in MicMuteStrandedTests, against the service itself.
         expect(Defaults.registeredDefaults[DefaultsKey.radialMenuEnabled] as? Bool == false,
                "the radial menu ships off by default")
         expect(Defaults.registeredDefaults[DefaultsKey.radialMenuShortcut] as? String

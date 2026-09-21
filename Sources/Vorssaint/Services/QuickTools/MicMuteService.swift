@@ -39,6 +39,9 @@ final class MicMuteService: ObservableObject {
     /// A sweep that finished after a newer one started must not publish what
     /// it saw.
     private var applyGeneration = 0
+    /// Sweeps handed to the queue whose result has not been published yet.
+    /// The stranded-mute offer must not cross one of these.
+    private var pendingApplies = 0
 
     private init() {
         hotkey.onPress = { [weak self] in self?.toggle() }
@@ -114,7 +117,11 @@ final class MicMuteService: ObservableObject {
     /// direct request: with no record to go by this can also open a microphone
     /// silenced in System Settings, which is the person's call to make each
     /// time and never a standing permission the app keeps.
+    /// A mute being applied right now would be undone by this, and the app
+    /// would go on showing a mute it no longer holds, so the offer stands
+    /// aside until that sweep has published.
     func releaseStrandedMute() {
+        guard !isMuted, pendingApplies == 0 else { return }
         halQueue.async { [weak self] in
             for device in Self.inputDevices() where Self.muteSwitchValue(of: device.id) == 1 {
                 let released = Self.setMuteSwitch(false, of: device.id)
@@ -193,6 +200,7 @@ final class MicMuteService: ObservableObject {
         let legacyVolume = defaults.double(forKey: DefaultsKey.micMuteSavedVolume)
 
         applyGeneration += 1
+        pendingApplies += 1
         let generation = applyGeneration
         halQueue.async { [weak self] in
             let outcome = Self.applyToDevices(muted: muted,
@@ -207,6 +215,7 @@ final class MicMuteService: ObservableObject {
 
     /// Main thread. Publishes one sweep.
     private func finish(_ outcome: MuteOutcome, muted: Bool, announce: Bool, generation: Int) {
+        pendingApplies -= 1
         guard generation == applyGeneration else { return }
         // A sweep that reached nothing leaves the recorded state alone: it is
         // what a later unmute needs to put every level back. For a mute that
@@ -218,7 +227,9 @@ final class MicMuteService: ObservableObject {
             refreshStrandedMute()
             if announce, muted {
                 QuickToolHUD.show(icon: "mic.slash.fill",
-                                  message: L10n.shared.s.micAlreadySilentHUD)
+                                  message: outcome.refused
+                                      ? L10n.shared.s.micMuteFailedHUD
+                                      : L10n.shared.s.micAlreadySilentHUD)
             }
             return
         }
@@ -245,6 +256,11 @@ final class MicMuteService: ObservableObject {
 
     private struct MuteOutcome {
         var applied: Bool
+        /// A microphone that was still open and would not take the write.
+        /// A sweep that reached nothing because of this is a mute that
+        /// failed, not a Mac that was already quiet, and the two must not
+        /// report the same thing.
+        var refused: Bool = false
         var savedVolumes: [String: Double]
         var mutedDevices: [String]
     }
@@ -304,6 +320,7 @@ final class MicMuteService: ObservableObject {
                 outcome.applied = true
                 outcome.mutedDevices.append(device.uid)
             } else {
+                outcome.refused = true
                 outcome.savedVolumes.removeValue(forKey: device.uid)
             }
         }

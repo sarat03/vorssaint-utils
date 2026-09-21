@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "マイクを消音しました",
         micUnmutedHUD: "マイクを再開しました",
         micAlreadySilentHUD: "マイクはすでに消音されています",
+        micMuteFailedHUD: "マイクを消音できませんでした",
         micMuteMenuBarToggle: "消音中はメニューバーに表示",
         micMuteMenuBarCaption: "メニューバーのアプリアイコンの横に、赤い斜線入りのマイクが表示されます。",
         pastePlainName: "プレーンテキストとしてペースト",

@@ -197,6 +197,7 @@ extension Strings {
         micMutedHUD: "Micro coupé",
         micUnmutedHUD: "Micro réactivé",
         micAlreadySilentHUD: "Le micro est déjà coupé",
+        micMuteFailedHUD: "Impossible de couper le microphone",
         micMuteMenuBarToggle: "Afficher dans la barre des menus quand le micro est coupé",
         micMuteMenuBarCaption: "Un micro barré en rouge apparaît à côté de l’icône de l’app dans la barre des menus.",
         pastePlainName: "Coller en texte brut",

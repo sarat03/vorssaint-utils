@@ -27,6 +27,7 @@ enum MicMuteStrandedContract {
 
     struct MuteOutcome {
         var applied: Bool
+        var refused: Bool = false
         var savedVolumes: [String: Double]
         var mutedDevices: [String]
     }
@@ -120,6 +121,12 @@ enum MicMuteStrandedTests {
         expect(!stubborn.applied && stubborn.mutedDevices.isEmpty
                 && stubborn.savedVolumes.isEmpty,
                "a device that keeps its level is not recorded as muted, and its level is not saved")
+        // A sweep that reached nothing because the write was refused is a
+        // mute that failed, and must not be reported as a Mac already quiet.
+        expect(stubborn.refused,
+               "a refused write is told apart from every microphone already being silent")
+        expect(!nothingToDo.refused,
+               "a Mac whose microphones were all quiet already reports no refusal")
 
         // MARK: the way out when a mute is left behind
 
@@ -182,6 +189,22 @@ enum MicMuteStrandedTests {
         settle(refused)
         expect(Context.writes.map(\.uid) == ["interface"] && refused.hasStrandedMute,
                "an attempt that failed leaves the offer standing instead of waiting for a restart")
+
+        // A mute being applied right now would be undone by the offer, and
+        // the app would go on showing a mute it no longer holds.
+        Context.reset([silenced("built-in", id: 1)])
+        let crossing = Context.Service()
+        crossing.pendingApplies = 1
+        crossing.hasStrandedMute = true
+        crossing.releaseStrandedMute()
+        settle(crossing)
+        expect(Context.writes.isEmpty,
+               "the offer stands aside while a mute is still being applied")
+        crossing.pendingApplies = 0
+        crossing.releaseStrandedMute()
+        settle(crossing)
+        expect(Context.writes.map(\.uid) == ["built-in"],
+               "and opens the microphone once that sweep has published")
 
         // A microphone that arrives silenced later is noticed on the next look.
         Context.reset([open("built-in", id: 1)])
