@@ -87,11 +87,6 @@ struct QuickToolsSettings: View {
                                 .foregroundStyle(.secondary)
                                 .frame(width: 34, alignment: .trailing)
                         }
-                        if let auto = brightness.keyboardAutoBrightness {
-                            Toggle(FeatureStrings.brightness(l10n.language).keyboardAutoBrightness,
-                                   isOn: Binding(get: { auto },
-                                                 set: { brightness.setKeyboardAutoBrightness($0) }))
-                        }
                     }
                     DiskExclusionsList()
                     Text(FeatureStrings.quickToggles(l10n.language).panelCaption)

@@ -147,7 +147,8 @@ struct BrightnessSection: View {
     }
 
     /// Sits with the display sliders because it is the same control. The
-    /// Quick toggles switch stays the place to flip it off and back on.
+    /// Quick toggles switch stays the place to flip it off and back on, and
+    /// the slider reaches 0, so the row carries no switch of its own.
     private var keyboardLightRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -158,36 +159,6 @@ struct BrightnessSection: View {
                 Text(strings.keyboardLight)
                     .font(.system(size: 11.5, weight: .medium))
                     .lineLimit(1)
-                Toggle("", isOn: Binding(
-                    get: { service.keyboardLightEnabled ?? false },
-                    set: { service.setKeyboardLightEnabled($0) }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .help(strings.keyboardLightCaption)
-                .accessibilityLabel(strings.keyboardLight)
-                if let auto = service.keyboardAutoBrightness {
-                    Button {
-                        service.setKeyboardAutoBrightness(!auto)
-                    } label: {
-                        Text(strings.keyboardAutoBrightnessShort)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(auto ? AnyShapeStyle(.tint)
-                                                  : AnyShapeStyle(.secondary))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(auto ? AnyShapeStyle(.tint.opacity(0.15))
-                                               : AnyShapeStyle(Color.secondary.opacity(0.12)))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help(strings.keyboardAutoBrightness)
-                    .accessibilityLabel(strings.keyboardAutoBrightness)
-                    .accessibilityAddTraits(auto ? [.isSelected] : [])
-                }
                 Spacer(minLength: 4)
                 Text("\(Int(((service.keyboardLightLevel ?? 0) * 100).rounded()))%")
                     .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
