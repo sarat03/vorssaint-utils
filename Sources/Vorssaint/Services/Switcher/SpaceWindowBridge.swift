@@ -268,12 +268,18 @@ enum SpaceWindowBridge {
         let userGenerated: UInt32 = 0x200
         guard setFrontProcess(&psn, windowID, userGenerated) == .success else { return false }
         var targetID = windowID
-        var clickPoint = CGPoint(x: -1, y: -1)
         var record = [UInt8](repeating: 0, count: 0x100)
         record[0x04] = 0xf8 // declared record length
         record[0x3a] = 0x10
         withUnsafeBytes(of: &targetID) { record.replaceSubrange(0x3c..<0x3c + $0.count, with: $0) }
-        withUnsafeBytes(of: &clickPoint) { record.replaceSubrange(0x20..<0x20 + $0.count, with: $0) }
+        // The location and the fields packed beside it are filled with 0xff so
+        // the window server reads no usable click out of them. A real point
+        // here is not merely outside the frame: CGPoint is two 64-bit doubles,
+        // so writing one runs past the coordinates into the click count, and
+        // the app can take the pair for a double click in its title bar, whose
+        // standard action is to zoom the window (issue: windows zoom on every
+        // switch).
+        record.replaceSubrange(0x20..<0x30, with: [UInt8](repeating: 0xff, count: 0x10))
         record[0x08] = 0x01 // left mouse down…
         let down = postEventRecord(&psn, &record)
         record[0x08] = 0x02 // …then up: the pair makes the window key
