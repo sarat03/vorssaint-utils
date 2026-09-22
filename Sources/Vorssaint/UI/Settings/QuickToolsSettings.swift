@@ -20,6 +20,7 @@ struct QuickToolsSettings: View {
     @AppStorage(DefaultsKey.scratchpadRetention) private var scratchpadRetention = ScratchpadRetention.never.rawValue
     @AppStorage(DefaultsKey.scratchpadCloseOnClickOutside) private var scratchpadCloseOnClickOutside = true
     @AppStorage(DefaultsKey.scratchpadBackgroundOpacity) private var scratchpadBackgroundOpacity = 0.0
+    @AppStorage(DefaultsKey.scratchpadTextSize) private var scratchpadTextSize = ScratchpadSupport.defaultTextSize
     @AppStorage(DefaultsKey.micMuteMenuBarIndicator) private var micMenuBarIndicator = false
     @AppStorage(DefaultsKey.cleaningModeKeepScreenVisible) private var cleaningModeKeepScreenVisible = false
 
@@ -189,6 +190,18 @@ struct QuickToolsSettings: View {
                         .onChange(of: scratchpadCloseOnClickOutside) { _, _ in
                             ScratchpadService.shared.outsideClickPreferenceDidChange()
                         }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(FeatureStrings.scratchpad(l10n.language).textSize)
+                            Spacer()
+                            Text("\(Int(ScratchpadSupport.sanitizedTextSize(scratchpadTextSize)))")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $scratchpadTextSize,
+                               in: ScratchpadSupport.textSizeRange,
+                               step: 1)
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text(FeatureStrings.scratchpad(l10n.language).backgroundOpacity)
                         Slider(value: scratchpadBackgroundOpacityBinding,

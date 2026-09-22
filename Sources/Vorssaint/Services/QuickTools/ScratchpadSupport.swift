@@ -159,13 +159,16 @@ struct ScratchpadDocument: Codable, Equatable {
     }
 }
 
-/// Focused-pad tab shortcuts mirror the browser: Command-T opens a tab and
-/// Command-W closes one, or hides the pad when only the last tab remains.
-enum ScratchpadFocusedTabShortcut {
+/// What the keyboard means while the pad has focus. Tabs mirror the browser:
+/// Command-T opens one and Command-W closes one, or hides the pad when only the
+/// last tab remains. Command-F is the system's own find, which the text view
+/// already knows how to run. One table, so both pads answer the same keys.
+enum ScratchpadFocusedShortcut {
     enum Action: Equatable {
         case createPad
         case closeSelectedPad
         case hidePad
+        case find
     }
 
     static func action(charactersIgnoringModifiers: String?,
@@ -178,6 +181,8 @@ enum ScratchpadFocusedTabShortcut {
             return canCreatePad ? .createPad : nil
         case "w":
             return canClosePad ? .closeSelectedPad : .hidePad
+        case "f":
+            return .find
         default:
             return nil
         }
@@ -188,6 +193,19 @@ enum ScratchpadSupport {
     /// The fill sits over the existing material: zero preserves the familiar
     /// frosted pad, while one fully covers what is behind the window.
     static let backgroundOpacityRange: ClosedRange<Double> = 0...1
+
+    /// The size the whole pad draws at, for anyone who finds 12 small to live
+    /// in. It is a preference rather than a mark: plain text cannot carry a
+    /// point size, so one selection cannot differ from another, and the heading
+    /// levels are the format's own way of making words bigger. They step up
+    /// from whatever this is set to.
+    static let defaultTextSize: Double = 12
+    static let textSizeRange: ClosedRange<Double> = 10...22
+
+    static func sanitizedTextSize(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultTextSize }
+        return min(max(value.rounded(), textSizeRange.lowerBound), textSizeRange.upperBound)
+    }
 
     static func sanitizedBackgroundOpacity(_ value: Double) -> Double {
         guard value.isFinite else { return backgroundOpacityRange.upperBound }
@@ -338,5 +356,277 @@ enum ScratchpadSupport {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         return "\(safeTitle) \(formatter.string(from: date)).txt"
+    }
+}
+
+/// A mark the formatting toolbar can apply. Each one is written as the
+/// Markdown a user would have typed by hand, so the pad stays plain text and
+/// the preview parser needs nothing new to understand it.
+enum ScratchpadMark: String, CaseIterable {
+    case bold, italic, strikethrough, heading, bullet
+    case numbered, quote, code, link
+
+    /// Inline marks wrap the selection.
+    var wrap: String? {
+        switch self {
+        case .bold: return "**"
+        case .italic: return "*"
+        case .strikethrough: return "~~"
+        case .code: return "`"
+        case .heading, .bullet, .numbered, .quote, .link: return nil
+        }
+    }
+
+    /// Line marks prefix every line the selection touches, and clicking steps
+    /// along this list before coming back off. A bullet is only on or off, but
+    /// a heading has levels, and the preview draws each at its own size, so the
+    /// button walks down them rather than stranding everyone on the largest.
+    var lineCycle: [String] {
+        switch self {
+        case .heading: return ["# ", "## ", "### "]
+        case .bullet: return ["- "]
+        case .numbered: return ["1. "]
+        case .quote: return ["> "]
+        case .bold, .italic, .strikethrough, .code, .link: return []
+        }
+    }
+
+    /// Ordered items are numbered as they are written, so the prefix a line
+    /// ends up with is not the prefix the line after it gets.
+    var isNumbered: Bool { self == .numbered }
+
+    /// A letter drawn in place of the symbol, where one says the thing better.
+    var glyph: String? { self == .heading ? "H" : nil }
+
+    var symbol: String {
+        switch self {
+        case .bold: return "bold"
+        case .italic: return "italic"
+        case .strikethrough: return "strikethrough"
+        // Never reached while `glyph` answers for headings, and kept honest in
+        // case it stops: every symbol for this reads as font size, which is a
+        // different thing, and not one plain Markdown can say.
+        case .heading: return "textformat.size"
+        case .bullet: return "list.bullet"
+        case .numbered: return "list.number"
+        case .quote: return "text.quote"
+        case .code: return "chevron.left.slash.chevron.right"
+        case .link: return "link"
+        }
+    }
+}
+
+/// One replacement, ready for the text view: what to swap out, what to put
+/// there, and where the selection belongs afterwards.
+struct ScratchpadMarkEdit: Equatable {
+    /// Both ranges are in UTF-16 units, the same units NSTextView selections
+    /// use, so nothing has to be converted on the way in or out.
+    let range: NSRange
+    let replacement: String
+    let selection: NSRange
+}
+
+extension ScratchpadSupport {
+    /// Every mark toggles: applying one to text that already carries it takes
+    /// it back off, so a second click on the same button undoes the first.
+    static func edit(applying mark: ScratchpadMark,
+                     to text: String,
+                     selection: NSRange) -> ScratchpadMarkEdit {
+        let ns = text as NSString
+        let location = min(max(selection.location, 0), ns.length)
+        let length = min(max(selection.length, 0), ns.length - location)
+        let safe = NSRange(location: location, length: length)
+        if mark == .link {
+            return linkEdit(in: ns, selection: safe)
+        }
+        if let wrap = mark.wrap {
+            return inlineEdit(wrap: wrap, in: ns, selection: safe)
+        }
+        return linePrefixEdit(mark: mark, in: ns, selection: safe)
+    }
+
+    /// What a link needs next is the address, so it goes in as a placeholder
+    /// that arrives selected: the first keystroke after the click replaces it.
+    /// Asking for the address up front would need a dialog the pad has no room
+    /// for, and would stop anyone pasting a link they have not copied yet.
+    static let linkPlaceholder = "url"
+
+    private static func linkEdit(in ns: NSString, selection: NSRange) -> ScratchpadMarkEdit {
+        // A second click means here what it means for every other mark: take it
+        // back off. The first click leaves the address selected, not the whole
+        // link, so the link has to be recognised from anywhere inside it.
+        if let existing = enclosingLink(in: ns, selection: selection) {
+            let label = ns.substring(with: existing.label)
+            return ScratchpadMarkEdit(
+                range: existing.whole,
+                replacement: label,
+                selection: NSRange(location: existing.whole.location,
+                                   length: (label as NSString).length))
+        }
+        let selected = ns.substring(with: selection)
+        let opening = (selected as NSString).length + 3   // "[" + text + "]("
+        return ScratchpadMarkEdit(
+            range: selection,
+            replacement: "[\(selected)](\(linkPlaceholder))",
+            selection: NSRange(location: selection.location + opening,
+                               length: (linkPlaceholder as NSString).length))
+    }
+
+    private static let linkPattern = try? NSRegularExpression(pattern: "\\[([^\\]]*)\\]\\(([^)]*)\\)")
+
+    /// The link the selection sits in, with the range of its words. A caret has
+    /// to be strictly inside one: resting it against either edge is where
+    /// someone is about to write a new link, not undo the one behind them.
+    private static func enclosingLink(in ns: NSString,
+                                      selection: NSRange) -> (whole: NSRange, label: NSRange)? {
+        guard let linkPattern else { return nil }
+        let matches = linkPattern.matches(in: ns as String,
+                                          range: NSRange(location: 0, length: ns.length))
+        for match in matches {
+            let whole = match.range
+            let end = whole.location + whole.length
+            if selection.length == 0 {
+                guard selection.location > whole.location, selection.location < end else { continue }
+            } else {
+                guard selection.location >= whole.location,
+                      selection.location + selection.length <= end else { continue }
+            }
+            return (whole, match.range(at: 1))
+        }
+        return nil
+    }
+
+    private static func inlineEdit(wrap: String,
+                                   in ns: NSString,
+                                   selection: NSRange) -> ScratchpadMarkEdit {
+        let markerLength = (wrap as NSString).length
+        let selected = ns.substring(with: selection)
+
+        // The markers sit inside the selection, which is what a selection
+        // dragged across the whole marked span looks like.
+        if selected.count >= wrap.count * 2,
+           selected.hasPrefix(wrap), selected.hasSuffix(wrap),
+           !(wrap == "*" && selected.hasPrefix("**")) {
+            let inner = String(selected.dropFirst(wrap.count).dropLast(wrap.count))
+            return ScratchpadMarkEdit(
+                range: selection,
+                replacement: inner,
+                selection: NSRange(location: selection.location,
+                                   length: (inner as NSString).length))
+        }
+
+        // Or just outside it, which is where the second click lands: applying
+        // a mark leaves the inner text selected, not the markers.
+        let before = NSRange(location: selection.location - markerLength, length: markerLength)
+        let after = NSRange(location: selection.location + selection.length, length: markerLength)
+        if before.location >= 0,
+           after.location + after.length <= ns.length,
+           ns.substring(with: before) == wrap,
+           ns.substring(with: after) == wrap,
+           !isHalfOfBoldPair(wrap: wrap, in: ns, before: before, after: after) {
+            return ScratchpadMarkEdit(
+                range: NSRange(location: before.location,
+                               length: markerLength * 2 + selection.length),
+                replacement: selected,
+                selection: NSRange(location: before.location, length: selection.length))
+        }
+
+        // With no selection the pair still goes in, with the caret between the
+        // halves, so the button can be clicked before the words are typed.
+        return ScratchpadMarkEdit(
+            range: selection,
+            replacement: wrap + selected + wrap,
+            selection: NSRange(location: selection.location + markerLength,
+                               length: selection.length))
+    }
+
+    /// Italic's marker is also half of bold's. Without this, asking for italic
+    /// inside `**bold**` would tear the bold pair apart instead of nesting.
+    private static func isHalfOfBoldPair(wrap: String,
+                                         in ns: NSString,
+                                         before: NSRange,
+                                         after: NSRange) -> Bool {
+        guard wrap == "*" else { return false }
+        let star = "*"
+        let priorIsStar = before.location > 0
+            && ns.substring(with: NSRange(location: before.location - 1, length: 1)) == star
+        let nextIsStar = after.location + after.length < ns.length
+            && ns.substring(with: NSRange(location: after.location + after.length, length: 1)) == star
+        return priorIsStar || nextIsStar
+    }
+
+    private static func linePrefixEdit(mark: ScratchpadMark,
+                                       in ns: NSString,
+                                       selection: NSRange) -> ScratchpadMarkEdit {
+        let cycle = mark.lineCycle
+        guard !cycle.isEmpty else {
+            return ScratchpadMarkEdit(range: selection, replacement: "", selection: selection)
+        }
+        let lineRange = ns.lineRange(for: selection)
+        let block = ns.substring(with: lineRange)
+        // lineRange keeps the line terminator. Splitting with it still attached
+        // invents a trailing empty line that would collect a prefix of its own.
+        let terminator = block.hasSuffix("\n") ? "\n" : ""
+        let body = terminator.isEmpty ? block : String(block.dropLast())
+        let lines = body.components(separatedBy: "\n")
+
+        // Blank lines are skipped rather than marked, except in a pad that is
+        // blank altogether, where the click is how the first line gets started.
+        let written = lines.filter { !$0.isEmpty }
+        // Where the lines already sit in the cycle, and so what the click
+        // means. Past the last step the mark comes off, so a button clicked
+        // until something looks right always has an empty rung to land on.
+        let step: Int?
+        if mark.isNumbered {
+            step = !written.isEmpty && written.allSatisfy { numberedPrefix(of: $0) != nil } ? 0 : nil
+        } else {
+            step = cycle.firstIndex { prefix in
+                !written.isEmpty && written.allSatisfy { $0.hasPrefix(prefix) }
+            }
+        }
+        let next = step.map { $0 + 1 < cycle.count ? cycle[$0 + 1] : "" } ?? cycle[0]
+        var ordinal = 0
+        let updated: [String] = lines.map { line in
+            if line.isEmpty, lines.count > 1 { return line }
+            let body = strippingLineMark(from: line)
+            guard !next.isEmpty else { return body }
+            guard mark.isNumbered else { return next + body }
+            ordinal += 1
+            return "\(ordinal). " + body
+        }
+
+        let replacement = updated.joined(separator: "\n") + terminator
+        let firstDelta = (updated[0] as NSString).length - (lines[0] as NSString).length
+        let totalDelta = (replacement as NSString).length - (block as NSString).length
+        let start = max(lineRange.location, selection.location + firstDelta)
+        return ScratchpadMarkEdit(
+            range: lineRange,
+            replacement: replacement,
+            selection: NSRange(location: start,
+                               length: max(0, selection.length + totalDelta - firstDelta)))
+    }
+
+    /// A line already carrying a line mark has it replaced rather than
+    /// stacked, whichever mark it was: a heading cannot grow into "# ## text",
+    /// and asking a bullet for a heading gives a heading, not "# - text".
+    private static func strippingLineMark(from line: String) -> String {
+        let hashes = line.prefix(while: { $0 == "#" })
+        if !hashes.isEmpty, hashes.count <= 6, line.dropFirst(hashes.count).hasPrefix(" ") {
+            return String(line.dropFirst(hashes.count + 1))
+        }
+        if let first = line.first, "-*+>".contains(first), line.dropFirst().hasPrefix(" ") {
+            return String(line.dropFirst(2))
+        }
+        if let numbered = numberedPrefix(of: line) {
+            return String(line.dropFirst(numbered.count))
+        }
+        return line
+    }
+
+    /// "12. " and the like, however many digits the list has run to.
+    private static func numberedPrefix(of line: String) -> String? {
+        let digits = line.prefix(while: { $0.isNumber })
+        guard !digits.isEmpty, line.dropFirst(digits.count).hasPrefix(". ") else { return nil }
+        return String(line.prefix(digits.count + 2))
     }
 }

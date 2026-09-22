@@ -78,16 +78,26 @@ struct NotchIconButton: View {
     let symbol: String
     let title: String
     var selected = false
+    /// Drawn in place of the symbol when a letter says the thing better than
+    /// any glyph does, as "H" does for a heading where every symbol for it
+    /// reads as font size instead.
+    var glyph: String?
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
+            Group {
+                if let glyph {
+                    Text(verbatim: glyph).font(.system(size: 12, weight: .semibold))
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: 12, weight: .medium))
+                        .contentTransition(.symbolEffect(.replace))
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: symbol)
+                }
+            }
                 .foregroundStyle(selected ? .white : .white.opacity(0.55))
-                .contentTransition(.symbolEffect(.replace))
-                .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: symbol)
                 .frame(width: 28, height: 28)
                 .background(.white.opacity(selected ? 0.12 : 0),
                             in: RoundedRectangle(cornerRadius: 9, style: .continuous))

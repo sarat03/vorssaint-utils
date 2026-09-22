@@ -63,6 +63,9 @@ final class NotchService: ObservableObject {
     /// Bumped when Command-W asks the Scratchpad page to close its selected
     /// pad, so the confirmation stays in the page as it does in the floating pad.
     @Published private(set) var scratchpadCloseSerial = 0
+    /// Find runs against the island's own text view, which the page holds;
+    /// the key arrives here, so it is passed on the way Command-W already is.
+    @Published private(set) var scratchpadFindSerial = 0
     @Published private var captureContentHeight: CGFloat?
     @Published private(set) var power = PowerReading()
     @Published private var musicDetailVisible = false
@@ -639,7 +642,7 @@ final class NotchService: ObservableObject {
         guard selected == .scratchpad, !showingAppPanel, !showingSections, selectedMetric == nil else { return false }
         let pad = ScratchpadService.shared
         let commandOnly = event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command
-        guard let action = ScratchpadFocusedTabShortcut.action(charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+        guard let action = ScratchpadFocusedShortcut.action(charactersIgnoringModifiers: event.charactersIgnoringModifiers,
                                                                commandOnly: commandOnly,
                                                                canCreatePad: pad.canCreatePad,
                                                                canClosePad: pad.canClosePad) else {
@@ -650,6 +653,7 @@ final class NotchService: ObservableObject {
         case .createPad: pad.createPad(defaultName: FeatureStrings.scratchpad(L10n.shared.language).pageTitle)
         case .closeSelectedPad: scratchpadCloseSerial += 1
         case .hidePad: collapse()
+        case .find: scratchpadFindSerial += 1
         }
         return true
     }

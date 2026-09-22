@@ -16,9 +16,13 @@ struct PlainTextEditor: NSViewRepresentable {
     /// `lineFragmentPadding` sits inside the inset and is set on the text
     /// container below rather than assumed, so this stays the source of
     /// the number instead of a copy of AppKit's default.
-    static let fontSize: CGFloat = 13
+    static let defaultFontSize: CGFloat = 13
     static let lineFragmentPadding: CGFloat = 5
 
+    /// The point size this editor draws at. Callers that overlay their own
+    /// text pass the same number rather than the default, or the placeholder
+    /// stops sitting on the first line as soon as the size is changed.
+    var fontSize: CGFloat = PlainTextEditor.defaultFontSize
     @Binding var text: String
     /// Character offsets rather than String.Index: an index computed
     /// against one version of the text is undefined behavior to read back
@@ -30,18 +34,25 @@ struct PlainTextEditor: NSViewRepresentable {
     /// one from something that changes will not see it re-applied.
     var textColor: NSColor?
     var textContainerInset: NSSize?
+    /// Turns on AppKit's own find bar: the real Command-F, with its counter,
+    /// its highlighting and Command-G, none of which is worth rewriting.
+    var usesFindBar = false
     /// Handed the text view once, for callers that need to reach it later.
     var onCreate: ((NSTextView) -> Void)?
 
     init(text: Binding<String>,
+         fontSize: CGFloat = PlainTextEditor.defaultFontSize,
          selectedRange: Binding<Range<Int>?>? = nil,
          textColor: NSColor? = nil,
          textContainerInset: NSSize? = nil,
+         usesFindBar: Bool = false,
          onCreate: ((NSTextView) -> Void)? = nil) {
         self._text = text
+        self.fontSize = fontSize
         self.selectedRange = selectedRange
         self.textColor = textColor
         self.textContainerInset = textContainerInset
+        self.usesFindBar = usesFindBar
         self.onCreate = onCreate
     }
 
@@ -52,7 +63,7 @@ struct PlainTextEditor: NSViewRepresentable {
         scroll.autohidesScrollers = true
         guard let textView = scroll.documentView as? NSTextView else { return scroll }
         textView.drawsBackground = false
-        textView.font = .systemFont(ofSize: Self.fontSize)
+        textView.font = .systemFont(ofSize: fontSize)
         textView.textContainer?.lineFragmentPadding = Self.lineFragmentPadding
         textView.allowsUndo = true
         textView.isRichText = false
@@ -65,6 +76,10 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.isAutomaticLinkDetectionEnabled = false
         textView.isAutomaticDataDetectionEnabled = false
         textView.smartInsertDeleteEnabled = false
+        if usesFindBar {
+            textView.usesFindBar = true
+            textView.isIncrementalSearchingEnabled = true
+        }
         if let textColor {
             textView.textColor = textColor
         }
@@ -81,9 +96,13 @@ struct PlainTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView,
-              textView.string != text,
-              !textView.hasMarkedText() else { return }
+        guard let textView = nsView.documentView as? NSTextView else { return }
+        // Size is a preference and can change under a view that is already up,
+        // so it is applied before the text guard below rather than after it.
+        if textView.font?.pointSize != fontSize {
+            textView.font = .systemFont(ofSize: fontSize)
+        }
+        guard textView.string != text, !textView.hasMarkedText() else { return }
         // Setting .string posts a selection notification, and answering it
         // here would write state from inside a view update.
         context.coordinator.isApplyingExternalText = true
