@@ -633,7 +633,9 @@ struct MarkdownPreview: NSViewRepresentable {
             prefix = String(repeating: "  ", count: depth - 1) + "▏ "
             color = .secondaryLabelColor
         case .code:
-            font = .monospacedSystemFont(ofSize: base, weight: .regular)
+            // A point under the body, as inline code is, since monospace
+            // reads larger than the system face at the same size.
+            font = .monospacedSystemFont(ofSize: base - 1, weight: .regular)
         case .thematicBreak:
             text = AttributedString(String(repeating: "─", count: 24))
             color = .secondaryLabelColor

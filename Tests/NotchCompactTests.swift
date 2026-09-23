@@ -63,6 +63,7 @@ enum NotchCompactTests {
         @Published var marksExpanded = false
         func toggleMarks() { marksExpanded.toggle() }
         func showFindBar(in editor: NSTextView? = nil) {}
+        func hideFindBar(in editor: NSTextView) {}
         func togglePreview() { isPreviewing.toggle() }
         func show(allowsIsland: Bool = true) {}
         func exportText(suggestedName: String, from window: NSWindow? = nil) {}

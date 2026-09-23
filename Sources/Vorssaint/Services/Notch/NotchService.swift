@@ -1745,9 +1745,11 @@ final class NotchService: ObservableObject {
             }
             if event.type == .keyDown, event.window === self.panel, event.keyCode == 53 {
                 // A level being typed in the mixer cancels on Escape by
-                // itself; the island collapses on the next one.
+                // itself, and the scratchpad's find bar closes on it; the
+                // island collapses on the next one.
                 if let editor = self.panel?.firstResponder as? NSTextView, editor.isFieldEditor,
                    (editor.delegate as AnyObject?) is MixerPercentNativeTextField { return event }
+                if PlainTextEditor.findBarHasKeyboard(in: self.panel) { return event }
                 self.collapse()
                 return nil
             }

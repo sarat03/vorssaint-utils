@@ -318,6 +318,7 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         isPreviewing.toggle()
         if isPreviewing { marksExpanded = false }
         if isPreviewing {
+            if let textView = textView, textView.window === panel { hideFindBar(in: textView) }
             panel?.makeFirstResponder(nil)
         } else {
             focusText()
@@ -514,6 +515,15 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         textView.performTextFinderAction(sender)
     }
 
+    /// Both hosts draw the editor at zero opacity in preview, and its find bar
+    /// with it, so the bar closes rather than keep a search nobody can see.
+    func hideFindBar(in editor: NSTextView) {
+        guard editor.enclosingScrollView?.isFindBarVisible == true else { return }
+        let sender = NSMenuItem()
+        sender.tag = NSTextFinder.Action.hideFindInterface.rawValue
+        editor.performTextFinderAction(sender)
+    }
+
     private func installMonitors(for panel: NSPanel) {
         removeMonitors()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
@@ -523,6 +533,9 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
                 if let textView = self.textView, textView.hasMarkedText() {
                     return event
                 }
+                // The find bar puts itself away on Esc and hands the keyboard
+                // back to the text; the pad hides on the next one.
+                if PlainTextEditor.findBarHasKeyboard(in: panel) { return event }
                 self.hide()
                 return nil
             }

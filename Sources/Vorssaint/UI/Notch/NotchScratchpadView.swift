@@ -76,12 +76,20 @@ struct NotchScratchpadView: View {
             DispatchQueue.main.async { focusEditor() }
         }
         .onChange(of: pad.isPreviewing) { _, previewing in
+            guard let view = editor.view else { return }
             if previewing {
-                if let view = editor.view, view.window?.firstResponder === view {
+                pad.hideFindBar(in: view)
+                if view.window?.firstResponder === view || PlainTextEditor.findBarHasKeyboard(in: view.window) {
                     view.window?.makeFirstResponder(nil)
                 }
             } else {
-                DispatchQueue.main.async { focusEditor() }
+                DispatchQueue.main.async {
+                    // Preview closed the bar, so one up now was opened by
+                    // Command-F on its way out of preview, and its search
+                    // field keeps the keyboard instead of the caret.
+                    guard view.enclosingScrollView?.isFindBarVisible != true else { return }
+                    focusEditor()
+                }
             }
         }
         .onChange(of: service.scratchpadCloseSerial) { _, _ in
@@ -235,11 +243,6 @@ struct NotchScratchpadView: View {
     /// puts it after a tab change.
     private func focusEditor() {
         guard !pad.isPreviewing, let view = editor.view, let window = view.window, window.isKeyWindow else { return }
-        // Leaving preview asks for the caret back, and Command-F from preview
-        // leaves preview on its way to the find bar. This runs a turn later, so
-        // without this it would take the keyboard off the search field the user
-        // just opened and drop the caret at the end of the note.
-        guard view.enclosingScrollView?.isFindBarVisible != true else { return }
         window.makeFirstResponder(view)
         let end = NSRange(location: (view.string as NSString).length, length: 0)
         view.setSelectedRange(end)

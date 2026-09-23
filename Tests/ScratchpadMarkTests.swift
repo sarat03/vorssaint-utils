@@ -196,6 +196,8 @@ enum ScratchpadMarkTests {
                "a corrupt size falls back to the default rather than drawing nothing")
         expect(ScratchpadSupport.textSizeRange.contains(ScratchpadSupport.defaultTextSize),
                "and the default is inside the range the slider offers")
+        expect(ScratchpadSupport.defaultTextSize == 13,
+               "an untouched pad keeps the 13 it drew at before the slider")
 
         // A range that outlived the text it was measured against is clamped
         // rather than trusted; NSString would raise on it.

@@ -23,6 +23,18 @@ struct PlainTextEditor: NSViewRepresentable {
     /// text pass the same number rather than the default, or the placeholder
     /// stops sitting on the first line as soon as the size is changed.
     var fontSize: CGFloat = PlainTextEditor.defaultFontSize
+
+    /// Whether the keyboard is in a find bar's search field rather than in
+    /// the text it searches, so Esc can put the search away before the pad.
+    static func findBarHasKeyboard(in window: NSWindow?) -> Bool {
+        guard let field = window?.firstResponder as? NSTextView, field.isFieldEditor,
+              let control = field.delegate as? NSView else { return false }
+        return sequence(first: control, next: \.superview).contains { view in
+            guard let bar = (view as? NSScrollView)?.findBarView else { return false }
+            return control.isDescendant(of: bar)
+        }
+    }
+
     @Binding var text: String
     /// Character offsets rather than String.Index: an index computed
     /// against one version of the text is undefined behavior to read back

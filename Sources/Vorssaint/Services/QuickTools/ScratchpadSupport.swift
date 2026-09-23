@@ -194,12 +194,13 @@ enum ScratchpadSupport {
     /// frosted pad, while one fully covers what is behind the window.
     static let backgroundOpacityRange: ClosedRange<Double> = 0...1
 
-    /// The size the whole pad draws at, for anyone who finds 12 small to live
-    /// in. It is a preference rather than a mark: plain text cannot carry a
+    /// The size the whole pad draws at, for anyone who finds the editor's own
+    /// 13 small to live in. It is a preference rather than a mark: plain text cannot carry a
     /// point size, so one selection cannot differ from another, and the heading
     /// levels are the format's own way of making words bigger. They step up
-    /// from whatever this is set to.
-    static let defaultTextSize: Double = 12
+    /// from whatever this is set to. Untouched, the pad keeps the 13 it drew
+    /// at before there was a choice.
+    static let defaultTextSize: Double = 13
     static let textSizeRange: ClosedRange<Double> = 10...22
 
     static func sanitizedTextSize(_ value: Double) -> Double {
