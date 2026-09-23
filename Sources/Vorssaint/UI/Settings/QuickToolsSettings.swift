@@ -79,7 +79,7 @@ struct QuickToolsSettings: View {
                             Slider(value: Binding(
                                 get: { Double(brightness.keyboardLightLevel ?? 0) },
                                 set: { brightness.setKeyboardLightLevel(Float($0)) }
-                            ), in: 0...1)
+                            ), in: 0...1, onEditingChanged: brightness.keyboardLightDragChanged)
                             .accessibilityLabel(
                                 FeatureStrings.brightness(l10n.language).keyboardLight)
                             Text("\(Int(((brightness.keyboardLightLevel ?? 0) * 100).rounded()))%")

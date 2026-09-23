@@ -218,11 +218,10 @@ final class BrightnessService: ObservableObject {
     /// A drag folds into one write of its newest value, like the display
     /// sliders. Non-nil means a write is already scheduled.
     private var keyboardLevelWork: DispatchWorkItem?
-    /// The level the light was at before the current drag started, which is
-    /// what the switch brings back when the drag ends at 0. Cleared once the
-    /// slider has been still long enough to call the drag over.
-    private var preDragKeyboardLightLevel: Float?
-    private var keyboardDragEndWork: DispatchWorkItem?
+    /// Set between the slider's begin and end events. Holds the level the
+    /// light was at before the drag, which is what the switch brings back
+    /// when the drag ends at 0 (nil inside when it started off).
+    private var keyboardDragStart: Float??
     private var lastKeyboardLightLevel: Float = BrightnessSupport.defaultKeyboardLightLevel
     private var keyboardLightBridge: KeyboardLightBridge? { Self.sharedKeyboardLightBridge }
     private let displayBrightnessDecreaseHotkey = QuickToolHotkey(id: 59)
@@ -253,6 +252,7 @@ final class BrightnessService: ObservableObject {
 
     func setKeyboardLightEnabled(_ enabled: Bool) {
         guard keyboardLightEnabled != nil, let keyboardLightBridge else { return }
+        finishKeyboardLightDrag()
         if !enabled, let level = keyboardLightLevel, level > 0 {
             lastKeyboardLightLevel = level
         }
@@ -277,12 +277,10 @@ final class BrightnessService: ObservableObject {
         guard keyboardLightEnabled != nil,
               let target = BrightnessSupport.sliderKeyboardLightLevel(level)
         else { return }
-        if preDragKeyboardLightLevel == nil, let current = keyboardLightLevel, current > 0 {
-            preDragKeyboardLightLevel = current
-        }
         keyboardLightLevel = target
         keyboardLightEnabled = target > 0
-        scheduleKeyboardDragEnd()
+        // A step with no drag around it (VoiceOver, arrow keys) settles now.
+        if keyboardDragStart == nil, target > 0 { lastKeyboardLightLevel = target }
         guard keyboardLevelWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -304,25 +302,30 @@ final class BrightnessService: ObservableObject {
         showKeyboardLightNotice(target)
     }
 
-    /// A still slider is a finished drag. Only then is the level the switch
-    /// brings back settled: the level it was left at, or, if it was dragged
-    /// all the way off, the one it held before the drag rather than whatever
-    /// it passed on the way down.
-    private func scheduleKeyboardDragEnd() {
-        keyboardDragEndWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.keyboardDragEndWork = nil
-            let preDrag = self.preDragKeyboardLightLevel
-            self.preDragKeyboardLightLevel = nil
-            if let level = self.keyboardLightLevel, level > 0 {
-                self.lastKeyboardLightLevel = level
-            } else if let preDrag, preDrag > 0 {
-                self.lastKeyboardLightLevel = preDrag
-            }
+    /// The slider's own begin and end events bracket a drag. A pause while
+    /// still holding it is not an end.
+    func keyboardLightDragChanged(_ editing: Bool) {
+        if editing {
+            finishKeyboardLightDrag()
+            let current = keyboardLightLevel
+            keyboardDragStart = .some(current.flatMap { $0 > 0 ? $0 : nil })
+        } else {
+            finishKeyboardLightDrag()
         }
-        keyboardDragEndWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Settles the level the switch brings back: where the drag left it, or,
+    /// if it went all the way off, the level held before the drag rather than
+    /// whatever it passed on the way down. Anything else that takes over the
+    /// light (the switch, a key step) calls this first.
+    private func finishKeyboardLightDrag() {
+        guard let start = keyboardDragStart else { return }
+        keyboardDragStart = nil
+        if let level = keyboardLightLevel, level > 0 {
+            lastKeyboardLightLevel = level
+        } else if let start {
+            lastKeyboardLightLevel = start
+        }
     }
 
     /// Reads this Mac's keyboard light only when its Quick toggles surface opens.
@@ -347,6 +350,7 @@ final class BrightnessService: ObservableObject {
               let keyboardLightBridge,
               let current = keyboardLightLevel(using: keyboardLightBridge)
         else { return }
+        finishKeyboardLightDrag()
         let target = BrightnessSupport.steppedKeyboardLightLevel(
             current: current, direction: direction)
         guard keyboardLightBridge.setBrightness(target) else {
@@ -465,8 +469,7 @@ final class BrightnessService: ObservableObject {
     func stop() {
         keyboardNoticeWork?.cancel(); keyboardNoticeWork = nil
         keyboardLevelWork?.cancel(); keyboardLevelWork = nil
-        keyboardDragEndWork?.cancel(); keyboardDragEndWork = nil
-        preDragKeyboardLightLevel = nil
+        keyboardDragStart = nil
         removeKeyTap()
         displayBrightnessDecreaseHotkey.unregister()
         displayBrightnessIncreaseHotkey.unregister()

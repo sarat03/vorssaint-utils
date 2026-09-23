@@ -164,7 +164,8 @@ struct BrightnessSection: View {
                     .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Slider(value: keyboardLightBinding, in: 0...1)
+            Slider(value: keyboardLightBinding, in: 0...1,
+                   onEditingChanged: service.keyboardLightDragChanged)
                 .controlSize(.small)
                 .accessibilityLabel(strings.keyboardLight)
         }
