@@ -100,9 +100,15 @@ enum NotchCompactTests {
         func makeKey() { Self.key = self }
         func makeFirstResponder(_ view: TextView?) { responderChanges += 1 }
     }
+    /// Not named ScrollView: inside this namespace that would shadow SwiftUI's
+    /// own, which the notch views use for their rows.
+    final class EditorScrollView {
+        var isFindBarVisible = false
+    }
     final class TextView {
         var window: Window?
         var string = "note"
+        var enclosingScrollView: EditorScrollView? = EditorScrollView()
         func setSelectedRange(_ range: NSRange) {}
         func scrollRangeToVisible(_ range: NSRange) {}
     }

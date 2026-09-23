@@ -15,7 +15,48 @@ enum ScratchpadMarkTests {
         return (result, edit.selection)
     }
 
+    /// Clicks a mark repeatedly, each time from the selection the click before
+    /// it left behind, which is what a person actually does. The bug this
+    /// guards against passed every single-step check: it only showed up on the
+    /// second click, because the first click's own selection was what confused
+    /// it.
+    private static func clicking(_ mark: ScratchpadMark,
+                                 _ times: Int,
+                                 from text: String,
+                                 _ selection: NSRange) -> String {
+        var current = text
+        var range = selection
+        for _ in 0..<times {
+            let edit = ScratchpadSupport.edit(applying: mark, to: current, selection: range)
+            current = (current as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+            range = edit.selection
+        }
+        return current
+    }
+
     static func run(_ expect: (Bool, String) -> Void) {
+        // Two clicks put the text back where it started. Heading is the one
+        // exception by design, since it walks its levels on the way out.
+        for mark in [ScratchpadMark.bold, .italic, .strikethrough, .code, .link,
+                     .bullet, .quote, .numbered] {
+            let round = clicking(mark, 2, from: "note", NSRange(location: 0, length: 4))
+            expect(round == "note", "\(mark.rawValue) twice leaves the text alone, got \(round)")
+        }
+        let headingCycle = clicking(.heading, 4, from: "note", NSRange(location: 0, length: 4))
+        expect(headingCycle == "note", "heading comes back off after its levels, got \(headingCycle)")
+
+        // The reported case: an italic word inside bold grew a star on every
+        // click instead of toggling.
+        let insideBold = clicking(.italic, 2, from: "**note**", NSRange(location: 2, length: 4))
+        expect(insideBold == "**note**",
+               "italic inside bold toggles without touching the bold, got \(insideBold)")
+        let fourClicks = clicking(.italic, 4, from: "**note**", NSRange(location: 2, length: 4))
+        expect(fourClicks == "**note**", "and keeps toggling, got \(fourClicks)")
+        let boldInsideItalic = clicking(.bold, 2, from: "*note*", NSRange(location: 1, length: 4))
+        expect(boldInsideItalic == "*note*",
+               "and the same the other way round, got \(boldInsideItalic)")
+
+
         let wrapped = applying(.bold, to: "note", NSRange(location: 0, length: 4))
         expect(wrapped.text == "**note**", "bold wraps the selection, got \(wrapped.text)")
         expect(wrapped.selection == NSRange(location: 2, length: 4),
