@@ -87,7 +87,6 @@ enum NotchCompactTests {
         let symbol: String
         let title: String
         var selected = false
-        var glyph: String?
         let action: () -> Void
         var body: some View { Button(title, action: action) }
     }

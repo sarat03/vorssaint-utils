@@ -198,7 +198,7 @@ struct QuickToolsSettings: View {
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
-                        Slider(value: $scratchpadTextSize,
+                        Slider(value: scratchpadTextSizeBinding,
                                in: ScratchpadSupport.textSizeRange,
                                step: 1)
                     }
@@ -261,6 +261,13 @@ struct QuickToolsSettings: View {
         Binding(
             get: { ScratchpadSupport.sanitizedBackgroundOpacity(scratchpadBackgroundOpacity) },
             set: { scratchpadBackgroundOpacity = ScratchpadSupport.sanitizedBackgroundOpacity($0) }
+        )
+    }
+
+    private var scratchpadTextSizeBinding: Binding<Double> {
+        Binding(
+            get: { ScratchpadSupport.sanitizedTextSize(scratchpadTextSize) },
+            set: { scratchpadTextSize = ScratchpadSupport.sanitizedTextSize($0) }
         )
     }
 }

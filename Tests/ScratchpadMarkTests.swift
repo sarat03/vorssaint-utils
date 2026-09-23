@@ -203,5 +203,22 @@ enum ScratchpadMarkTests {
         // rather than trusted; NSString would raise on it.
         let stale = applying(.bold, to: "hi", NSRange(location: 40, length: 9))
         expect(stale.text == "hi****", "an out-of-date selection cannot crash, got \(stale.text)")
+
+        // Select All over a heading, then take it off: the selection shrinks
+        // with the text rather than running on into the line below.
+        let unheaded = applying(.heading, to: "### a\nnext", NSRange(location: 0, length: 5))
+        expect(unheaded.text == "a\nnext" && unheaded.selection == NSRange(location: 0, length: 1),
+               "a removed prefix does not stretch the selection, got \(unheaded.selection)")
+
+        // Indentation nests a list, so a mark sits after it and comes back off.
+        expect(clicking(.bullet, 1, from: "- a\n  - b", NSRange(location: 6, length: 0)) == "- a\n  b",
+               "a nested bullet comes off rather than stacking")
+        expect(clicking(.bullet, 2, from: "- a\n  - b", NSRange(location: 6, length: 0)) == "- a\n  - b",
+               "and goes back on at its own depth")
+
+        // Markdown does not close a mark against a space, so the space a drag
+        // picks up after a word stays outside the markers.
+        expect(applying(.bold, to: "hello world", NSRange(location: 0, length: 6)).text == "**hello** world",
+               "a trailing space stays outside the markers")
     }
 }

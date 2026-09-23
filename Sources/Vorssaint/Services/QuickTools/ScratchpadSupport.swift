@@ -436,9 +436,14 @@ extension ScratchpadSupport {
         let ns = text as NSString
         let location = min(max(selection.location, 0), ns.length)
         let length = min(max(selection.length, 0), ns.length - location)
-        let safe = NSRange(location: location, length: length)
+        var safe = NSRange(location: location, length: length)
         if mark == .link {
             return linkEdit(in: ns, selection: safe)
+        }
+        // A drag across words picks up the space after them, and Markdown will
+        // not close a mark against a space, so "**word **" would never render.
+        if mark.wrap != nil {
+            safe = trimmingSpace(from: safe, in: ns)
         }
         if mark == .italic {
             return italicEdit(in: ns, selection: safe)
@@ -447,6 +452,18 @@ extension ScratchpadSupport {
             return inlineEdit(wrap: wrap, in: ns, selection: safe)
         }
         return linePrefixEdit(mark: mark, in: ns, selection: safe)
+    }
+
+    private static func trimmingSpace(from selection: NSRange, in ns: NSString) -> NSRange {
+        func isSpace(_ unit: unichar) -> Bool {
+            UnicodeScalar(unit).map(CharacterSet.whitespacesAndNewlines.contains) ?? false
+        }
+        var start = selection.location
+        var end = selection.location + selection.length
+        while start < end, isSpace(ns.character(at: start)) { start += 1 }
+        while end > start, isSpace(ns.character(at: end - 1)) { end -= 1 }
+        // Nothing but space selected: there are no words to keep the marks on.
+        return start == end ? selection : NSRange(location: start, length: end - start)
     }
 
     /// What a link needs next is the address, so it goes in as a placeholder
@@ -616,9 +633,12 @@ extension ScratchpadSupport {
         let body = terminator.isEmpty ? block : String(block.dropLast())
         let lines = body.components(separatedBy: "\n")
 
+        // Indentation is what nests a list, so the mark goes after it and the
+        // line keeps its depth rather than growing "-   - text".
+        func indent(of line: String) -> Substring { line.prefix(while: { $0 == " " || $0 == "\t" }) }
         // Blank lines are skipped rather than marked, except in a pad that is
         // blank altogether, where the click is how the first line gets started.
-        let written = lines.filter { !$0.isEmpty }
+        let written = lines.map { String($0.dropFirst(indent(of: $0).count)) }.filter { !$0.isEmpty }
         // Where the lines already sit in the cycle, and so what the click
         // means. Past the last step the mark comes off, so a button clicked
         // until something looks right always has an empty rung to land on.
@@ -633,23 +653,29 @@ extension ScratchpadSupport {
         let next = step.map { $0 + 1 < cycle.count ? cycle[$0 + 1] : "" } ?? cycle[0]
         var ordinal = 0
         let updated: [String] = lines.map { line in
-            if line.isEmpty, lines.count > 1 { return line }
-            let body = strippingLineMark(from: line)
-            guard !next.isEmpty else { return body }
-            guard mark.isNumbered else { return next + body }
+            let lead = String(indent(of: line))
+            let rest = String(line.dropFirst(lead.count))
+            if rest.isEmpty, lines.count > 1 { return line }
+            let body = strippingLineMark(from: rest)
+            guard !next.isEmpty else { return lead + body }
+            guard mark.isNumbered else { return lead + next + body }
             ordinal += 1
-            return "\(ordinal). " + body
+            return lead + "\(ordinal). " + body
         }
 
         let replacement = updated.joined(separator: "\n") + terminator
         let firstDelta = (updated[0] as NSString).length - (lines[0] as NSString).length
         let totalDelta = (replacement as NSString).length - (block as NSString).length
+        // Both ends move with the prefixes before them. The start is held at
+        // the line's start when a removed prefix would pull it past that, and
+        // the end is worked out on its own so that hold is not added to the
+        // length, which ran the selection into the text after the lines.
         let start = max(lineRange.location, selection.location + firstDelta)
+        let end = max(start, selection.location + selection.length + totalDelta)
         return ScratchpadMarkEdit(
             range: lineRange,
             replacement: replacement,
-            selection: NSRange(location: start,
-                               length: max(0, selection.length + totalDelta - firstDelta)))
+            selection: NSRange(location: start, length: end - start))
     }
 
     /// A line already carrying a line mark has it replaced rather than
