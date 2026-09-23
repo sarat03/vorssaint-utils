@@ -479,6 +479,12 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
     /// finder's actions was asked for, and that arrives as a sender's tag.
     func showFindBar(in editor: NSTextView? = nil) {
         guard let textView = editor ?? textView.flatMap({ $0.window === panel ? $0 : nil }) else { return }
+        // Both hosts keep the editor at zero opacity while previewing. Focusing
+        // it there would open a find bar nobody can see, over a source nobody
+        // is reading, so the pad comes back to the text first.
+        if isPreviewing {
+            isPreviewing = false
+        }
         let sender = NSMenuItem()
         sender.tag = NSTextFinder.Action.showFindInterface.rawValue
         textView.window?.makeFirstResponder(textView)

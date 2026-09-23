@@ -633,7 +633,7 @@ struct MarkdownPreview: NSViewRepresentable {
             prefix = String(repeating: "  ", count: depth - 1) + "▏ "
             color = .secondaryLabelColor
         case .code:
-            font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            font = .monospacedSystemFont(ofSize: base, weight: .regular)
         case .thematicBreak:
             text = AttributedString(String(repeating: "─", count: 24))
             color = .secondaryLabelColor
@@ -679,7 +679,7 @@ struct MarkdownPreview: NSViewRepresentable {
 
         for (intent, range) in intents {
             var font = intent.contains(.code)
-                ? NSFont.monospacedSystemFont(ofSize: max(12, baseFont.pointSize - 1), weight: .regular)
+                ? NSFont.monospacedSystemFont(ofSize: max(9, baseFont.pointSize - 1), weight: .regular)
                 : baseFont
             if intent.contains(.stronglyEmphasized) {
                 font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)

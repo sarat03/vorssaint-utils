@@ -33,9 +33,24 @@ enum ScratchpadMarkTests {
         expect(caret.text == "****" && caret.selection.location == 2,
                "with no selection the caret lands between the markers, got \(caret.text)")
 
-        // Italic's marker is also half of bold's.
+        // Italic's marker is also half of bold's, and a single character cannot
+        // tell the two apart: what does is whether the run of stars is odd.
         let nested = applying(.italic, to: "**note**", NSRange(location: 2, length: 4))
         expect(nested.text == "***note***", "italic nests inside bold, got \(nested.text)")
+        let unnested = applying(.italic, to: "***note***", NSRange(location: 3, length: 4))
+        expect(unnested.text == "**note**",
+               "and comes back off leaving bold alone, got \(unnested.text)")
+        let wholeNested = applying(.italic, to: "***note***", NSRange(location: 0, length: 10))
+        expect(wholeNested.text == "**note**",
+               "from the whole span too, got \(wholeNested.text)")
+        let plainItalic = applying(.italic, to: "note", NSRange(location: 0, length: 4))
+        expect(plainItalic.text == "*note*", "italic alone still wraps, got \(plainItalic.text)")
+        let offAgain = applying(.italic, to: "*note*", NSRange(location: 1, length: 4))
+        expect(offAgain.text == "note", "and comes off, got \(offAgain.text)")
+        // Bold over an italic word keeps the italic star it is wrapped around.
+        let boldOverItalic = applying(.bold, to: "*note*", NSRange(location: 0, length: 6))
+        expect(boldOverItalic.text == "***note***",
+               "bold wraps an italic word, got \(boldOverItalic.text)")
 
         let firstHeading = applying(.heading, to: "", NSRange(location: 0, length: 0))
         expect(firstHeading.text == "# ", "an empty pad still takes a heading, got \(firstHeading.text)")

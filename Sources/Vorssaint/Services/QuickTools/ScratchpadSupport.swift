@@ -439,6 +439,9 @@ extension ScratchpadSupport {
         if mark == .link {
             return linkEdit(in: ns, selection: safe)
         }
+        if mark == .italic {
+            return italicEdit(in: ns, selection: safe)
+        }
         if let wrap = mark.wrap {
             return inlineEdit(wrap: wrap, in: ns, selection: safe)
         }
@@ -505,8 +508,7 @@ extension ScratchpadSupport {
         // The markers sit inside the selection, which is what a selection
         // dragged across the whole marked span looks like.
         if selected.count >= wrap.count * 2,
-           selected.hasPrefix(wrap), selected.hasSuffix(wrap),
-           !(wrap == "*" && selected.hasPrefix("**")) {
+           selected.hasPrefix(wrap), selected.hasSuffix(wrap) {
             let inner = String(selected.dropFirst(wrap.count).dropLast(wrap.count))
             return ScratchpadMarkEdit(
                 range: selection,
@@ -522,8 +524,7 @@ extension ScratchpadSupport {
         if before.location >= 0,
            after.location + after.length <= ns.length,
            ns.substring(with: before) == wrap,
-           ns.substring(with: after) == wrap,
-           !isHalfOfBoldPair(wrap: wrap, in: ns, before: before, after: after) {
+           ns.substring(with: after) == wrap {
             return ScratchpadMarkEdit(
                 range: NSRange(location: before.location,
                                length: markerLength * 2 + selection.length),
@@ -540,19 +541,63 @@ extension ScratchpadSupport {
                                length: selection.length))
     }
 
-    /// Italic's marker is also half of bold's. Without this, asking for italic
-    /// inside `**bold**` would tear the bold pair apart instead of nesting.
-    private static func isHalfOfBoldPair(wrap: String,
-                                         in ns: NSString,
-                                         before: NSRange,
-                                         after: NSRange) -> Bool {
-        guard wrap == "*" else { return false }
-        let star = "*"
-        let priorIsStar = before.location > 0
-            && ns.substring(with: NSRange(location: before.location - 1, length: 1)) == star
-        let nextIsStar = after.location + after.length < ns.length
-            && ns.substring(with: NSRange(location: after.location + after.length, length: 1)) == star
-        return priorIsStar || nextIsStar
+    /// Italic's marker is a single star, which is also half of bold's pair, so
+    /// no one character says whether a star belongs to italic. What settles it
+    /// is how many stars run together: an odd run has an italic star on the
+    /// inside of however many bold pairs sit outside it. Reading one character
+    /// instead left a second click adding a pair rather than removing one, and
+    /// bold and italic together grew a star on every click.
+    private static func italicEdit(in ns: NSString, selection: NSRange) -> ScratchpadMarkEdit {
+        let selected = ns.substring(with: selection)
+        let leading = selected.prefix(while: { $0 == "*" }).count
+        let trailing = selected.reversed().prefix(while: { $0 == "*" }).count
+
+        // The stars are inside the selection, which is what selecting the whole
+        // marked span looks like. Only the innermost pair is italic's.
+        if leading % 2 == 1, trailing % 2 == 1, selected.count > leading + trailing - 1 {
+            let inner = String(selected.dropFirst().dropLast())
+            return ScratchpadMarkEdit(
+                range: selection,
+                replacement: inner,
+                selection: NSRange(location: selection.location,
+                                   length: (inner as NSString).length))
+        }
+
+        // Or just outside it, which is where the second click lands, since the
+        // first leaves the words selected and the markers around them.
+        if starRun(in: ns, endingAt: selection.location) % 2 == 1,
+           starRun(in: ns, startingAt: selection.location + selection.length) % 2 == 1 {
+            let outer = NSRange(location: selection.location - 1, length: selection.length + 2)
+            return ScratchpadMarkEdit(
+                range: outer,
+                replacement: selected,
+                selection: NSRange(location: outer.location, length: selection.length))
+        }
+
+        return ScratchpadMarkEdit(
+            range: selection,
+            replacement: "*" + selected + "*",
+            selection: NSRange(location: selection.location + 1, length: selection.length))
+    }
+
+    private static func starRun(in ns: NSString, endingAt index: Int) -> Int {
+        var count = 0
+        var cursor = index - 1
+        while cursor >= 0, ns.substring(with: NSRange(location: cursor, length: 1)) == "*" {
+            count += 1
+            cursor -= 1
+        }
+        return count
+    }
+
+    private static func starRun(in ns: NSString, startingAt index: Int) -> Int {
+        var count = 0
+        var cursor = index
+        while cursor < ns.length, ns.substring(with: NSRange(location: cursor, length: 1)) == "*" {
+            count += 1
+            cursor += 1
+        }
+        return count
     }
 
     private static func linePrefixEdit(mark: ScratchpadMark,
