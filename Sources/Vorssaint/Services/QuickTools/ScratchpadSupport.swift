@@ -162,21 +162,31 @@ struct ScratchpadDocument: Codable, Equatable {
 /// What the keyboard means while the pad has focus. Tabs mirror the browser:
 /// Command-T opens one and Command-W closes one, or hides the pad when only the
 /// last tab remains. Command-F is the system's own find, which the text view
-/// already knows how to run. One table, so both pads answer the same keys.
+/// already knows how to run, and Command-G and Shift-Command-G step through
+/// its matches, since no menu in the app carries them. One table, so both
+/// pads answer the same keys. `commandOnly` is Command without Control or
+/// Option; Shift is its own flag because only G takes it.
 enum ScratchpadFocusedShortcut {
     enum Action: Equatable {
         case createPad
         case closeSelectedPad
         case hidePad
         case find
+        case findNext
+        case findPrevious
     }
 
     static func action(charactersIgnoringModifiers: String?,
                        commandOnly: Bool,
+                       shift: Bool = false,
                        canCreatePad: Bool,
                        canClosePad: Bool) -> Action? {
         guard commandOnly else { return nil }
         switch charactersIgnoringModifiers?.lowercased() {
+        case "g":
+            return shift ? .findPrevious : .findNext
+        case _ where shift:
+            return nil
         case "t":
             return canCreatePad ? .createPad : nil
         case "w":

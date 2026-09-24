@@ -77,6 +77,7 @@ final class NotchService: ObservableObject {
     /// Find runs against the island's own text view, which the page holds;
     /// the key arrives here, so it is passed on the way Command-W already is.
     @Published private(set) var scratchpadFindSerial = 0
+    private(set) var scratchpadFindAction = NSTextFinder.Action.showFindInterface
     @Published private var captureContentHeight: CGFloat?
     @Published private(set) var power = PowerReading()
     @Published private var musicDetailVisible = false
@@ -778,21 +779,32 @@ final class NotchService: ObservableObject {
     private func handleScratchpadKey(_ event: NSEvent) -> Bool {
         guard selected == .scratchpad, !showingAppPanel, !showingSections, selectedMetric == nil else { return false }
         let pad = ScratchpadService.shared
-        let commandOnly = event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command
+        let commandOnly = event.modifierFlags.intersection([.command, .control, .option]) == .command
+        let shift = event.modifierFlags.contains(.shift)
         guard let action = ScratchpadFocusedShortcut.action(charactersIgnoringModifiers: event.charactersIgnoringModifiers,
                                                                commandOnly: commandOnly,
+                                                               shift: shift,
                                                                canCreatePad: pad.canCreatePad,
                                                                canClosePad: pad.canClosePad) else {
             // At the tab limit Command-T still belongs to the pad, not the text.
-            return commandOnly && event.charactersIgnoringModifiers?.lowercased() == "t"
+            return commandOnly && !shift && event.charactersIgnoringModifiers?.lowercased() == "t"
         }
         switch action {
         case .createPad: pad.createPad(defaultName: FeatureStrings.scratchpad(L10n.shared.language).pageTitle)
         case .closeSelectedPad: scratchpadCloseSerial += 1
         case .hidePad: collapse()
-        case .find: scratchpadFindSerial += 1
+        case .find: requestScratchpadFind(.showFindInterface)
+        case .findNext: requestScratchpadFind(.nextMatch)
+        case .findPrevious: requestScratchpadFind(.previousMatch)
         }
         return true
+    }
+
+    /// The editor lives in the view, so the request goes out as a serial and
+    /// the view reads which of the finder's actions it was for.
+    private func requestScratchpadFind(_ action: NSTextFinder.Action) {
+        scratchpadFindAction = action
+        scratchpadFindSerial += 1
     }
 
     func activateQuickAction(_ action: NotchQuickAction) {

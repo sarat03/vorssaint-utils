@@ -97,7 +97,7 @@ struct NotchScratchpadView: View {
             requestClose(selectedPad)
         }
         .onChange(of: service.scratchpadFindSerial) { _, _ in
-            pad.showFindBar(in: editor.view)
+            pad.performFind(service.scratchpadFindAction, in: editor.view)
         }
         .task(id: copied) {
             guard copied else { return }

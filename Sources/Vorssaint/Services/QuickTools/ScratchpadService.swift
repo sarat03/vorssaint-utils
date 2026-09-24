@@ -495,23 +495,31 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         case .hidePad:
             hide()
         case .find:
-            showFindBar()
+            performFind(.showFindInterface)
+        case .findNext:
+            performFind(.nextMatch)
+        case .findPrevious:
+            performFind(.previousMatch)
         }
     }
 
     /// The text view runs the find itself; it only has to be told which of the
     /// finder's actions was asked for, and that arrives as a sender's tag.
-    func showFindBar(in editor: NSTextView? = nil) {
+    func performFind(_ action: NSTextFinder.Action, in editor: NSTextView? = nil) {
         guard let textView = editor ?? textView.flatMap({ $0.window === panel ? $0 : nil }) else { return }
-        // Both hosts keep the editor at zero opacity while previewing. Focusing
-        // it there would open a find bar nobody can see, over a source nobody
-        // is reading, so the pad comes back to the text first.
+        // Both hosts keep the editor at zero opacity while previewing. Finding
+        // there would open a bar or select a match nobody can see, over a
+        // source nobody is reading, so the pad comes back to the text first.
         if isPreviewing {
             isPreviewing = false
         }
         let sender = NSMenuItem()
-        sender.tag = NSTextFinder.Action.showFindInterface.rawValue
-        textView.window?.makeFirstResponder(textView)
+        sender.tag = action.rawValue
+        // Stepping through matches leaves the keyboard where it is, so
+        // Command-G from the search field keeps typing in the field.
+        if action == .showFindInterface {
+            textView.window?.makeFirstResponder(textView)
+        }
         textView.performTextFinderAction(sender)
     }
 
@@ -541,10 +549,12 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
             }
             guard !self.modalInteractionActive else { return event }
             let commandOnly = event.modifierFlags
-                .intersection([.command, .option, .shift, .control]) == .command
+                .intersection([.command, .option, .control]) == .command
+            let shift = event.modifierFlags.contains(.shift)
             if let action = ScratchpadFocusedShortcut.action(
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers,
                 commandOnly: commandOnly,
+                shift: shift,
                 canCreatePad: self.canCreatePad,
                 canClosePad: self.canClosePad
             ) {
@@ -552,7 +562,7 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
                 return nil
             }
             // At the tab limit Command-T still belongs to the pad, not the text.
-            if commandOnly, event.charactersIgnoringModifiers?.lowercased() == "t" {
+            if commandOnly, !shift, event.charactersIgnoringModifiers?.lowercased() == "t" {
                 return nil
             }
             return event

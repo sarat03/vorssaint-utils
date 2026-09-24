@@ -184,6 +184,17 @@ enum ScratchpadMarkTests {
                                                 canCreatePad: true,
                                                 canClosePad: true) == nil,
                "a plain f is text, not a shortcut")
+        func shifted(_ key: String) -> ScratchpadFocusedShortcut.Action? {
+            ScratchpadFocusedShortcut.action(charactersIgnoringModifiers: key,
+                                             commandOnly: true,
+                                             shift: true,
+                                             canCreatePad: true,
+                                             canClosePad: true)
+        }
+        expect(shortcut("g") == .findNext, "Command-G finds the next match")
+        expect(shifted("G") == .findPrevious, "Shift-Command-G finds the previous match")
+        expect(shifted("t") == nil && shifted("w") == nil && shifted("f") == nil,
+               "Shift only belongs to G, so Shift-Command-T and W stay the text's")
 
         // The pad-wide size is stored, so it arrives as whatever was last
         // written there, including from a build with a different range.

@@ -28,6 +28,7 @@ enum NotchCompactTests {
         var presentationWindow: NSWindow?
         @Published var scratchpadCloseSerial = 0
         @Published var scratchpadFindSerial = 0
+        var scratchpadFindAction = NSTextFinder.Action.showFindInterface
         var contentSize = CGSize(width: 304, height: 122)
         var selected = NotchModule.controls
         var geometry = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
@@ -62,7 +63,7 @@ enum NotchCompactTests {
         func apply(_ mark: ScratchpadMark, through editor: NSTextView? = nil) {}
         @Published var marksExpanded = false
         func toggleMarks() { marksExpanded.toggle() }
-        func showFindBar(in editor: NSTextView? = nil) {}
+        func performFind(_ action: NSTextFinder.Action, in editor: NSTextView? = nil) {}
         func hideFindBar(in editor: NSTextView) {}
         func togglePreview() { isPreviewing.toggle() }
         func show(allowsIsland: Bool = true) {}
