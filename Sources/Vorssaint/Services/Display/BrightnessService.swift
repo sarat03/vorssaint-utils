@@ -308,8 +308,8 @@ final class BrightnessService: ObservableObject {
             self.commitKeyboardLightLevel()
         }
         keyboardLevelWork = work
-        // ponytail: one frame of folding; a real throttle if a drag ever
-        // outruns the private setter by more than this.
+        // One frame of folding; a real throttle if a drag ever outruns the
+        // private setter by more than this.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60.0, execute: work)
     }
 
@@ -348,7 +348,7 @@ final class BrightnessService: ObservableObject {
         }
     }
 
-    /// Reads this Mac's keyboard light only when its Quick toggles surface opens.
+    /// Reads this Mac's keyboard light when a surface that shows it opens.
     func refreshKeyboardLight() {
         // A read landing mid-drag would show the level the keyboard is still
         // catching up to, so the slider keeps its own value until the write lands.
