@@ -114,7 +114,9 @@ extension AppFeature {
                 ? .idle : .mouse
         case .notchNotifications, .notchGestures, .notchTimer, .notchQueue, .notchDownloads: return .idle
         case .notchAccessories: return .periodic
-        case .notch, .notchCalendar, .notchLyrics, .notchLiveEqualizer: return .periodic
+        // Log changes arrive as file events; a timer keeps countdowns and
+        // limits current while the section is on.
+        case .notch, .notchCalendar, .notchLyrics, .notchLiveEqualizer, .notchAgents: return .periodic
         case .clipboardHistory, .urlCleaner, .extraBrightness,
              .monitorCPU, .monitorGPU, .monitorMemory,
              .monitorNetwork, .monitorDisk, .monitorPower:
@@ -125,8 +127,8 @@ extension AppFeature {
         case .mouseAcceleration, .pastePlain, .soundOutputSwitcher, .micMute,
              .musicBlock, .bluetoothSleep, .keepAwake, .brightness, .quickLauncher, .quickToggles, .colorPicker,
              .screenOCR, .cleaningMode, .mediaTools, .cleaner, .uninstaller, .homebrew, .screenshot,
-             .cameraPreview, .scratchpad, .commandBar, .screenRecorder, .fanControl,
-             .diskImageInstaller, .killProcess:
+             .cameraPreview, .scratchpad, .commandBar, .screenRecorder, .wallpaper, .fanControl,
+             .diskImageInstaller, .killProcess, .portManager:
             return .idle
         case .appUpdates:
             // The list is on demand; only a background schedule keeps a timer.

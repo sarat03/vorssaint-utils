@@ -656,6 +656,37 @@ enum ScreenshotSupport {
             && (draft.standardized == bounds.standardized || !draft.contains(point))
     }
 
+    /// A captured image's alpha, top row first.
+    struct AlphaCoverage {
+        let alpha: [UInt8]
+        let width: Int
+        let height: Int
+
+        /// Total alpha inside `rect`, in image pixels from the top left.
+        func sum(in rect: CGRect) -> Int {
+            let area = rect.integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
+            guard !area.isNull, !area.isEmpty else { return 0 }
+            var total = 0
+            for row in Int(area.minY)..<Int(area.maxY) {
+                let start = row * width
+                for column in Int(area.minX)..<Int(area.maxX) { total += Int(alpha[start + column]) }
+            }
+            return total
+        }
+    }
+
+    /// Where a display capture of only some windows put them. Older systems
+    /// draw each window where it sits on the display. macOS 27 packs the
+    /// included windows into the image's top-left corner, keeping their
+    /// relative layout, so cropping at the window's place on screen kept only
+    /// its lower-right part beside empty space. Everything but those windows
+    /// is transparent, so
+    /// the placement that holds more of them is the one the system used.
+    static func attachedCaptureCrop(placed: CGRect, packed: CGRect,
+                                    coverage: AlphaCoverage) -> CGRect {
+        coverage.sum(in: packed) > coverage.sum(in: placed) ? packed : placed
+    }
+
     static func clamp(_ rect: CGRect, to bounds: CGRect) -> CGRect {
         var result = rect.intersection(bounds)
         if result.isNull { result = .zero }
@@ -1418,6 +1449,66 @@ enum ScreenshotSupport {
         }
     }
 
+    /// Text point sizes at 1x, offered as presets. Text has its own size
+    /// instead of borrowing the shape thickness, so a thin arrow can sit
+    /// beside a large label.
+    static let textSizes: [Int] = [10, 12, 14, 16, 19, 24, 28, 36, 48, 64, 72, 96]
+    static let defaultTextSize = 19
+
+    static func sanitizedTextSize(_ size: Int) -> Int {
+        guard let first = textSizes.first, let last = textSizes.last else { return defaultTextSize }
+        return size == 0 ? defaultTextSize : min(max(size, first), last)
+    }
+
+    /// The preset one step away from `size`, or nil at either end.
+    static func steppedTextSize(from size: Int, up: Bool) -> Int? {
+        up ? textSizes.first(where: { $0 > size }) : textSizes.last(where: { $0 < size })
+    }
+
+    /// How hard a blur hides what is under it, from 1 (lightest) to 5
+    /// (heaviest). Level 3 is the strength blurs always had. The screenshot
+    /// pixelate tool and video blurs share the scale so a level means the
+    /// same thing in both editors.
+    enum BlurStrength {
+        static let levels = 1...5
+        static let defaultLevel = 3
+
+        static func sanitized(_ level: Int) -> Int {
+            min(max(level, levels.lowerBound), levels.upperBound)
+        }
+
+        /// Where a new capture's pixelate tool starts: the remembered level,
+        /// but never a light one. Levels 1 and 2 make blocks smaller than a
+        /// line of text, which can stay readable, so they are picked area by
+        /// area instead of carried into the next redaction.
+        static func startingLevel(remembered: Int) -> Int {
+            max(sanitized(remembered), defaultLevel)
+        }
+
+        /// What the level does to the mosaic block, relative to level 3.
+        static func blockFactor(for level: Int) -> CGFloat {
+            switch sanitized(level) {
+            case 1: return 0.4
+            case 2: return 0.65
+            case 4: return 1.5
+            case 5: return 2.2
+            default: return 1
+            }
+        }
+    }
+
+    enum ArrowStyleID: String, CaseIterable {
+        case filled, outline, open, doubleEnded, scribbly
+
+        static func sanitized(_ raw: String?) -> ArrowStyleID {
+            ArrowStyleID(rawValue: raw ?? "") ?? .filled
+        }
+    }
+
+    static func randomScribbleSeed() -> UInt64 {
+        UInt64.random(in: UInt64.min...UInt64.max)
+    }
+
     enum StickerID: String, CaseIterable {
         case check, cross, star, heart, thumbsUp, thumbsDown,
              smile, laugh, party, fire, warning, eyes
@@ -1472,6 +1563,10 @@ enum ScreenshotSupport {
         var text: String
         var color: ColorID
         var stroke: StrokeID
+        var textSize: Int
+        var blurLevel: Int
+        var arrowStyle: ArrowStyleID
+        var scribbleSeed: UInt64
         var number: Int
 
         init(id: UUID = UUID(),
@@ -1481,6 +1576,10 @@ enum ScreenshotSupport {
              text: String = "",
              color: ColorID = .red,
              stroke: StrokeID = .medium,
+             textSize: Int = ScreenshotSupport.defaultTextSize,
+             blurLevel: Int = BlurStrength.defaultLevel,
+             arrowStyle: ArrowStyleID = .filled,
+             scribbleSeed: UInt64? = nil,
              number: Int = 0) {
             self.id = id
             self.tool = tool
@@ -1489,7 +1588,54 @@ enum ScreenshotSupport {
             self.text = text
             self.color = color
             self.stroke = stroke
+            self.textSize = textSize
+            self.blurLevel = blurLevel
+            self.arrowStyle = arrowStyle
+            self.scribbleSeed = scribbleSeed
+                ?? (arrowStyle == .scribbly
+                    ? ScreenshotSupport.randomScribbleSeed()
+                    : 0)
             self.number = number
+        }
+    }
+
+    /// The style values the editor controls should show for a picked mark.
+    struct SelectionStyle: Equatable {
+        let color: ColorID?
+        let stroke: StrokeID?
+        let arrowStyle: ArrowStyleID?
+        var textSize: Int? = nil
+        var blurLevel: Int? = nil
+    }
+
+    static func selectionStyle(for annotation: Annotation) -> SelectionStyle {
+        switch annotation.tool {
+        case .arrow:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: annotation.stroke,
+                                  arrowStyle: annotation.arrowStyle)
+        case .line, .rect, .ellipse, .freehand:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: annotation.stroke,
+                                  arrowStyle: nil)
+        case .text:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: nil,
+                                  arrowStyle: nil,
+                                  textSize: annotation.textSize)
+        case .highlight, .counter, .redact:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: nil,
+                                  arrowStyle: nil)
+        case .pixelate:
+            return SelectionStyle(color: nil,
+                                  stroke: nil,
+                                  arrowStyle: nil,
+                                  blurLevel: annotation.blurLevel)
+        case .sticker, .select, .crop:
+            return SelectionStyle(color: nil,
+                                  stroke: nil,
+                                  arrowStyle: nil)
         }
     }
 
@@ -1822,6 +1968,139 @@ enum ScreenshotSupport {
         return path
     }
 
+    /// Shaft and heads of a stroked arrow style as one path, so a single
+    /// stroke draws the whole arrow and casts one shadow. The solid style is a
+    /// filled silhouette rather than a stroke and answers nil.
+    static func arrowStrokePath(from tail: CGPoint,
+                                to tip: CGPoint,
+                                strokeWidth: CGFloat,
+                                style: ArrowStyleID,
+                                seed: UInt64) -> CGPath? {
+        let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
+        let path = CGMutablePath()
+        switch style {
+        case .filled:
+            return nil
+        case .outline:
+            path.addLines(between: [tail, CGPoint(x: (head.left.x + head.right.x) / 2,
+                                                  y: (head.left.y + head.right.y) / 2)])
+            path.addLines(between: [head.left, tip, head.right])
+            path.closeSubpath()
+        case .open:
+            path.addLines(between: [tail, tip])
+            path.addLines(between: [head.left, tip, head.right])
+        case .doubleEnded:
+            let tailHead = arrowHead(from: tip, to: tail, strokeWidth: strokeWidth)
+            path.addLines(between: [tail, tip])
+            path.addLines(between: [head.left, tip, head.right])
+            path.addLines(between: [tailHead.left, tail, tailHead.right])
+        case .scribbly:
+            let geometry = scribblyArrowGeometry(from: tail,
+                                                 to: tip,
+                                                 strokeWidth: strokeWidth,
+                                                 seed: seed)
+            path.addLines(between: geometry.shaft)
+            path.addLines(between: geometry.leftWing)
+            path.addLines(between: geometry.rightWing)
+        }
+        return path
+    }
+
+    /// A lightly hand-drawn arrow made from stable, seeded wobble. The seed
+    /// belongs to the annotation so a redraw or export keeps the same sketch,
+    /// while each newly created scribbly arrow gets its own variation.
+    struct ScribblyArrowGeometry: Equatable {
+        let shaft: [CGPoint]
+        let leftWing: [CGPoint]
+        let rightWing: [CGPoint]
+    }
+
+    static func scribblyArrowGeometry(from tail: CGPoint,
+                                      to tip: CGPoint,
+                                      strokeWidth: CGFloat,
+                                      seed: UInt64) -> ScribblyArrowGeometry {
+        let dx = tip.x - tail.x
+        let dy = tip.y - tail.y
+        let distance = hypot(dx, dy)
+        let angle = atan2(dy, dx)
+        let direction = CGPoint(x: cos(angle), y: sin(angle))
+        let perpendicular = CGPoint(x: -direction.y, y: direction.x)
+        let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
+        let base = CGPoint(x: (head.left.x + head.right.x) / 2,
+                           y: (head.left.y + head.right.y) / 2)
+        var randomizer = ScribbleRandomizer(seed: seed)
+        let shaftSegments = max(4, min(24, Int(ceil(distance / max(10, strokeWidth * 3)))))
+        let shaftWobble = min(max(1, strokeWidth * 0.35), distance * 0.025)
+        let shaft = roughPath(from: tail,
+                              to: base,
+                              segments: shaftSegments,
+                              direction: direction,
+                              perpendicular: perpendicular,
+                              wobble: shaftWobble,
+                              randomizer: &randomizer)
+        let wingWobble = min(max(0.8, strokeWidth * 0.22), distance * 0.035)
+        let leftWing = roughPath(from: head.left,
+                                 to: tip,
+                                 segments: 3,
+                                 wobble: wingWobble,
+                                 randomizer: &randomizer)
+        let rightWing = roughPath(from: head.right,
+                                  to: tip,
+                                  segments: 3,
+                                  wobble: wingWobble,
+                                  randomizer: &randomizer)
+        return ScribblyArrowGeometry(shaft: shaft,
+                                     leftWing: leftWing,
+                                     rightWing: rightWing)
+    }
+
+    private struct ScribbleRandomizer {
+        private var state: UInt64
+
+        init(seed: UInt64) {
+            state = seed == 0 ? 0x9E3779B97F4A7C15 : seed
+        }
+
+        mutating func signedUnit() -> CGFloat {
+            state = state &* 2862933555777941757 &+ 3037000493
+            let normalized = Double(state) / Double(UInt64.max)
+            return CGFloat(normalized * 2 - 1)
+        }
+    }
+
+    private static func roughPath(from start: CGPoint,
+                                  to end: CGPoint,
+                                  segments: Int,
+                                  direction: CGPoint? = nil,
+                                  perpendicular: CGPoint? = nil,
+                                  wobble: CGFloat,
+                                  randomizer: inout ScribbleRandomizer) -> [CGPoint] {
+        let lineX = end.x - start.x
+        let lineY = end.y - start.y
+        let length = hypot(lineX, lineY)
+        let pathDirection = direction
+            ?? CGPoint(x: lineX / max(length, 0.001), y: lineY / max(length, 0.001))
+        let pathPerpendicular = perpendicular
+            ?? CGPoint(x: -pathDirection.y, y: pathDirection.x)
+        let count = max(1, segments)
+        return (0...count).map { index in
+            let progress = CGFloat(index) / CGFloat(count)
+            guard index != 0, index != count else {
+                return CGPoint(x: start.x + lineX * progress,
+                               y: start.y + lineY * progress)
+            }
+            let envelope = CGFloat(sin(Double.pi * Double(progress)))
+            let sideOffset = randomizer.signedUnit() * wobble * envelope
+            let forwardOffset = randomizer.signedUnit() * wobble * 0.28 * envelope
+            return CGPoint(x: start.x + lineX * progress
+                                + pathPerpendicular.x * sideOffset
+                                + pathDirection.x * forwardOffset,
+                           y: start.y + lineY * progress
+                                + pathPerpendicular.y * sideOffset
+                                + pathDirection.y * forwardOffset)
+        }
+    }
+
     /// Distance from a point to a segment, for hit-testing lines and arrows.
     static func distance(from point: CGPoint, toSegment start: CGPoint, _ end: CGPoint) -> CGFloat {
         let dx = end.x - start.x
@@ -1837,11 +2116,20 @@ enum ScreenshotSupport {
 
     // MARK: - Redaction
 
-    /// Pixelation block size in image pixels: coarse enough that the mosaic
-    /// carries no legible detail, scaled to the capture so small crops and
-    /// full screens redact equally well.
-    static func pixelBlockSize(for imageSize: CGSize) -> Int {
-        max(10, Int(min(imageSize.width, imageSize.height) / 55))
+    /// Pixelation block size in image pixels, scaled to the capture so small
+    /// crops and full screens redact equally well. From the default level up
+    /// the mosaic carries no legible detail; levels 1 and 2 are lighter and
+    /// can leave large text readable.
+    static func pixelBlockSize(for imageSize: CGSize,
+                               level: Int = BlurStrength.defaultLevel) -> Int {
+        let base = max(10, Int(min(imageSize.width, imageSize.height) / 55))
+        return max(2, Int((CGFloat(base) * BlurStrength.blockFactor(for: level)).rounded()))
+    }
+
+    /// The blur levels the pixelate marks use. Each needs a mosaic as large as
+    /// the capture, so the editor keeps no other.
+    static func mosaicLevels(for annotations: [Annotation]) -> Set<Int> {
+        Set(annotations.filter { $0.tool == .pixelate }.map(\.blurLevel))
     }
 
     // MARK: - Export

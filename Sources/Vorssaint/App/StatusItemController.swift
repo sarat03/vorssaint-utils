@@ -8,10 +8,18 @@ import Combine
 /// title and the tooltip. Click handling is delegated back to the AppDelegate.
 final class StatusItemController {
     var onLeftClick: (() -> Void)?
-    var onRightClick: (() -> Void)?
+    /// Receives the button that was clicked, so a menu can open from it
+    /// while the main item is out of the bar.
+    var onRightClick: ((NSStatusBarButton?) -> Void)?
     var onMetricClick: ((MenuBarMetric, NSStatusBarButton) -> Void)?
+    var onClipboardPreviewClick: (() -> Void)?
 
     private(set) var statusItem: NSStatusItem!
+    /// The optional "show latest copy" item: same shape as a metric item —
+    /// independent, opt-in and separately clickable — but not itself a
+    /// MenuBarMetric, since its content comes from ClipboardHistoryService
+    /// rather than a SystemSnapshot reading.
+    private var clipboardPreviewStatusItem: NSStatusItem?
     private var metricStatusItems: [String: NSStatusItem] = [:]
     private var metricStatusItemFocus: [String: MenuBarMetric] = [:]
     private var cancellables = Set<AnyCancellable>()
@@ -20,6 +28,10 @@ final class StatusItemController {
     /// Last combination applied by updateIconAppearance, so refresh ticks
     /// don't re-render an unchanged icon every 2 seconds.
     private var lastIconStateKey = ""
+    /// True while the app itself keeps the main item out of the bar, for
+    /// Dynamic Island or for separate metrics, as opposed to macOS dropping
+    /// it. Recovery leaves such an item alone.
+    private(set) var mainItemHiddenByChoice = false
     private var heldMicBadgeActive: Bool?
     /// A settings reply already waiting for the next turn of the run loop.
     private var settingsSyncScheduled = false
@@ -35,12 +47,21 @@ final class StatusItemController {
     /// is answered once afterwards rather than on top of it.
     private var isRefreshing = false
     private var refreshRequestedWhileRunning = false
+    /// True once the clipboard preview's own subscriptions are wired up.
+    /// Merely referencing ClipboardHistoryService.shared brings the whole
+    /// service to life — its saved history file and image folder included —
+    /// so bind() only touches it once the feature is actually available,
+    /// rather than for every launch regardless of whether anyone uses it.
+    private var clipboardBindingsInstalled = false
     private static let mainAutosaveName = "VorssaintMenuBarItem"
     private static let metricAutosavePrefix = "VorssaintMetric"
+    private static let clipboardPreviewAutosaveName = "VorssaintClipboardPreview"
     private static let maxPlacementGeneration = 10_000
     private static let emptyStatusImage = NSImage()
 
-    private struct MetricStatusGroup {
+    /// One separate menu bar item: a metric, or a metric with its temperature
+    /// when the two are combined.
+    struct MetricStatusGroup {
         let id: String
         let metrics: [MenuBarMetric]
         let focusMetric: MenuBarMetric
@@ -58,7 +79,10 @@ final class StatusItemController {
     var button: NSStatusBarButton? { statusItem.button }
 
     func containsStatusItem(at screenPoint: NSPoint) -> Bool {
-        let buttons = ([statusItem?.button] + metricStatusItems.values.map(\.button)).compactMap { $0 }
+        let items = [statusItem, clipboardPreviewStatusItem].compactMap { $0 } + Array(metricStatusItems.values)
+        // A hidden item keeps its last frame, which another app's item may
+        // occupy by now.
+        let buttons = items.filter(\.isVisible).compactMap(\.button)
         // Bound once for the whole scan: a default argument is evaluated per
         // call, so leaving it to the default would rebuild this per button.
         let screenFrames = NSScreen.screens.map(\.frame)
@@ -76,11 +100,12 @@ final class StatusItemController {
     }
 
     /// Creates the status item and configures its button. The menu bar item is the
-    /// app's only entry point, so an empty behavior set keeps it from being dragged
-    /// off the bar (reordering still works), and forcing isVisible undoes any hidden
-    /// state macOS may have persisted. If it ever goes missing, re-opening the app
-    /// recovers access (see applicationShouldHandleReopen) and the "Show menu bar
-    /// icon" button in Settings rebuilds it.
+    /// app's entry point unless the person lets Dynamic Island stand in for it, so
+    /// an empty behavior set keeps it from being dragged off the bar (reordering
+    /// still works), and forcing isVisible undoes any hidden state macOS may have
+    /// persisted. If it ever goes missing, re-opening the app recovers access (see
+    /// applicationShouldHandleReopen) and the "Show menu bar icon" button in
+    /// Settings rebuilds it.
     private func installStatusItem() {
         // Nothing here may touch the saved placement. 3.3.3 retired a legacy
         // 64pt offset on every launch and took working coordinates with it;
@@ -174,6 +199,8 @@ final class StatusItemController {
             }
             .store(in: &cancellables)
 
+        bindClipboardPreviewIfAvailable()
+
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
                                                                   object: nil,
                                                                   queue: .main) { [weak self] _ in
@@ -195,7 +222,30 @@ final class StatusItemController {
             self.syncMonitorMode()
             self.updateIconAppearance()
             self.refresh()
+            self.bindClipboardPreviewIfAvailable()
+            self.syncClipboardPreviewItem()
         }
+    }
+
+    /// Wires up the clipboard preview's own subscriptions the first time the
+    /// feature is actually available — at launch if it already is, or the
+    /// moment a settings change (installing it from the hub, included) makes
+    /// it so. Referencing ClipboardHistoryService.shared any earlier would
+    /// bring the service to life for every launch, reading its saved history
+    /// file and scanning its image folder even for someone who never turned
+    /// the feature on.
+    private func bindClipboardPreviewIfAvailable() {
+        guard !clipboardBindingsInstalled, AppFeature.clipboardHistory.isAvailable else { return }
+        clipboardBindingsInstalled = true
+        ClipboardHistoryService.shared.$latestPasteboardEntry
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncClipboardPreviewItem() }
+            .store(in: &cancellables)
+
+        ClipboardHistoryService.shared.$isRunning
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncClipboardPreviewItem() }
+            .store(in: &cancellables)
     }
 
     deinit {
@@ -206,6 +256,9 @@ final class StatusItemController {
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         for item in metricStatusItems.values {
             NSStatusBar.system.removeStatusItem(item)
+        }
+        if let clipboardPreviewStatusItem {
+            NSStatusBar.system.removeStatusItem(clipboardPreviewStatusItem)
         }
     }
 
@@ -281,7 +334,8 @@ final class StatusItemController {
         let optionEnabled = defaults.bool(forKey: DefaultsKey.menuBarHideIconWithMetrics)
         let separateMetrics = defaults.bool(forKey: DefaultsKey.menuBarSeparateMetrics)
         let signal = updateAvailable || micBadgeActive
-        let hidden = MenuBarSpacingSupport.shouldHideStatusIcon(
+        let islandHides = MenuBarSpacingSupport.islandHidesStatusIcon(in: defaults) && !signal
+        let hidden = islandHides || MenuBarSpacingSupport.shouldHideStatusIcon(
             optionEnabled: optionEnabled,
             separateMetrics: separateMetrics,
             metricsEnabled: MenuBarMetric.anyEnabled(in: defaults),
@@ -289,13 +343,16 @@ final class StatusItemController {
             mustShowForSignal: signal)
         // In the separate-items mode the metrics are their own clickable
         // items, so hiding means the whole main item steps aside instead of
-        // just its image (which is all that item has).
-        let mainItemHidden = MenuBarSpacingSupport.shouldHideMainStatusItem(
-            optionEnabled: optionEnabled,
-            separateMetrics: separateMetrics,
-            metricItemsShown: renderedMetricItemCount,
-            renderedTitleLength: button.attributedTitle.length,
-            mustShowForSignal: signal)
+        // just its image (which is all that item has). With Dynamic Island
+        // standing in, the item goes whenever it has no text of its own.
+        let mainItemHidden = (islandHides && button.attributedTitle.length == 0)
+            || MenuBarSpacingSupport.shouldHideMainStatusItem(
+                optionEnabled: optionEnabled,
+                separateMetrics: separateMetrics,
+                metricItemsShown: renderedMetricItemCount,
+                renderedTitleLength: button.attributedTitle.length,
+                mustShowForSignal: signal)
+        mainItemHiddenByChoice = mainItemHidden
         let keepAwakeActive = KeepAwakeManager.shared.isActive
 
         // refresh() runs on every monitor tick and lands here; re-rendering
@@ -331,10 +388,19 @@ final class StatusItemController {
 
     @objc private func clicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            onRightClick?()
+            onRightClick?(statusItem.button)
         } else {
             onLeftClick?()
         }
+    }
+
+    /// The item a right-click menu opens from: the main one while it is in
+    /// the bar, otherwise the item that was clicked. A menu set on an item
+    /// that is out of the bar has nowhere on screen to open from.
+    func menuHost(for button: NSStatusBarButton?) -> NSStatusItem {
+        guard !statusItem.isVisible, let button else { return statusItem }
+        let others = [clipboardPreviewStatusItem].compactMap { $0 } + Array(metricStatusItems.values)
+        return others.first { $0.button === button } ?? statusItem
     }
 
     /// Updates the countdown title and tooltip from the current session state.
@@ -419,23 +485,24 @@ final class StatusItemController {
             }
         } else {
             // The leading space separates the glyph from the text; with the
-            // glyph hidden by the metrics-only option it would be pure dead
-            // padding on the item's left edge. Same decision inputs as
-            // updateIconAppearance, with a sentinel length: the title is
-            // known non-empty on this branch.
+            // glyph hidden by the metrics-only option or by Dynamic Island it
+            // would be pure dead padding on the item's left edge. Same
+            // decision inputs as updateIconAppearance, with a sentinel length:
+            // the title is known non-empty on this branch.
             let updateAvailable: Bool
             if case .available = UpdateService.shared.state {
                 updateAvailable = true
             } else {
                 updateAvailable = false
             }
-            let micBadgeActive = renderedMicBadgeActive
-            let glyphHidden = MenuBarSpacingSupport.shouldHideStatusIcon(
-                optionEnabled: defaults.bool(forKey: DefaultsKey.menuBarHideIconWithMetrics),
-                separateMetrics: separateMetrics,
-                metricsEnabled: !metrics.isEmpty,
-                renderedTitleLength: 1,
-                mustShowForSignal: updateAvailable || micBadgeActive)
+            let signal = updateAvailable || renderedMicBadgeActive
+            let glyphHidden = (MenuBarSpacingSupport.islandHidesStatusIcon(in: defaults) && !signal)
+                || MenuBarSpacingSupport.shouldHideStatusIcon(
+                    optionEnabled: defaults.bool(forKey: DefaultsKey.menuBarHideIconWithMetrics),
+                    separateMetrics: separateMetrics,
+                    metricsEnabled: !metrics.isEmpty,
+                    renderedTitleLength: 1,
+                    mustShowForSignal: signal)
             let full = NSMutableAttributedString(string: glyphHidden ? "" : " ")
             full.append(title)
             let stacked = full.string.contains("\n")
@@ -489,7 +556,7 @@ final class StatusItemController {
     private func refreshMetricStatusItems(metrics: [MenuBarMetric],
                                           snapshot: SystemSnapshot,
                                           strings: Strings) {
-        let groups = metricStatusGroups(for: metrics, strings: strings)
+        let groups = Self.metricStatusGroups(for: metrics, strings: strings)
         let wanted = Set(groups.map(\.id))
         removeMetricStatusItems(except: wanted)
         var rendered = 0
@@ -541,7 +608,9 @@ final class StatusItemController {
         }
     }
 
-    private func metricStatusGroups(for metrics: [MenuBarMetric], strings: Strings) -> [MetricStatusGroup] {
+    /// How the enabled metrics split into separate items. Static so the
+    /// Settings preview draws the same split the bar does.
+    static func metricStatusGroups(for metrics: [MenuBarMetric], strings: Strings) -> [MetricStatusGroup] {
         guard MenuBarMetricAppearance.current.allowsCombinedTemperatures,
               UserDefaults.standard.bool(forKey: DefaultsKey.menuBarCombineTemperatures) else {
             return metrics.map {
@@ -626,7 +695,7 @@ final class StatusItemController {
 
     @objc private func metricClicked(_ sender: NSStatusBarButton) {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            onRightClick?()
+            onRightClick?(sender)
             return
         }
         guard let metric = focusMetric(from: sender) else {
@@ -654,6 +723,126 @@ final class StatusItemController {
         metricStatusItemFocus.removeValue(forKey: id)
         metricEmptyRenders.removeValue(forKey: id)
         guard let item = metricStatusItems.removeValue(forKey: id) else { return }
+        NSStatusBar.system.removeStatusItem(item)
+    }
+
+    // MARK: - Clipboard preview item
+
+    /// Creates or removes the clipboard preview item for the feature itself
+    /// being on or off, and keeps its text current while it exists — hidden
+    /// rather than removed when there is simply nothing to show, so it never
+    /// sits in the bar as a bare empty gap.
+    /// Runs on every entries/isRunning change and on every settings sync, so
+    /// toggling the option or the character limit takes effect immediately.
+    private func syncClipboardPreviewItem() {
+        let defaults = UserDefaults.standard
+        // Checked before ever touching ClipboardHistoryService.shared: merely
+        // referencing it brings the whole service to life — its saved history
+        // file and image folder included — and this runs on every settings
+        // change, not just clipboard ones.
+        guard AppFeature.clipboardHistory.isAvailable,
+              defaults.bool(forKey: DefaultsKey.clipboardHistoryEnabled),
+              defaults.bool(forKey: DefaultsKey.clipboardHistoryMenuBarPreview)
+        else {
+            removeClipboardPreviewStatusItem()
+            return
+        }
+        let history = ClipboardHistoryService.shared
+        guard history.isRunning else {
+            removeClipboardPreviewStatusItem()
+            return
+        }
+
+        // The feature itself is on; keep the item itself alive even with
+        // nothing to show right now (e.g. right after Clear All) rather than
+        // removing it — macOS does not reliably restore a dragged position
+        // for an item recreated later, so removing it would land it back at
+        // the default spot the next time something is copied. Hidden rather
+        // than shown blank, though: an empty title would otherwise sit in
+        // the bar as a bare gap.
+        //
+        // No fallback to recentEntries here: latestPasteboardEntry is
+        // matched against the pasteboard's real content as soon as history
+        // starts watching (at launch, and whenever the feature is toggled
+        // back on) and kept correct from then on (nil means the pasteboard
+        // was actually cleared, or the last change was deliberately not
+        // recorded), so falling back to history would undo exactly that —
+        // e.g. auto clear wiping the pasteboard while the entry stays in
+        // history.
+        let entry = history.latestPasteboardEntry
+        let maxCharacters = Defaults.sanitizedClipboardMenuBarPreviewLength(
+            defaults.integer(forKey: DefaultsKey.clipboardHistoryMenuBarPreviewLength))
+        let text = entry?.menuBarText(maxCharacters: maxCharacters) ?? ""
+
+        let item = clipboardPreviewStatusItem ?? installClipboardPreviewStatusItem()
+        if item.length != NSStatusItem.variableLength {
+            item.length = NSStatusItem.variableLength
+        }
+        if item.isVisible != (entry != nil) {
+            item.isVisible = entry != nil
+        }
+        guard let button = item.button else { return }
+        // A non-nil empty image, not the metric items' actual glyph: same
+        // reasoning as their own emptyStatusImage use, so this text also
+        // dims correctly on an inactive display instead of staying full
+        // strength beside metrics that do.
+        if button.image !== Self.emptyStatusImage {
+            button.image = Self.emptyStatusImage
+        }
+        if button.imagePosition != .noImage {
+            button.imagePosition = .noImage
+        }
+        let font = MenuBarRenderer.statusFont(stacked: false)
+        if button.font?.isEqual(font) != true {
+            button.font = font
+        }
+        if button.title != text {
+            button.title = text
+        }
+        // menuBarText again rather than entry.preview directly: preview's
+        // .files case joins every file name with no bound of its own, so a
+        // large batch of files would otherwise make an unbounded tooltip.
+        // tooltipCharacters, not previewCharacters: previewCharacters is
+        // sized for a list row's three lines, which would still let a whole
+        // page of copied prose through as a hover tooltip.
+        let tooltip = entry?.menuBarText(maxCharacters: ClipboardHistoryEditing.tooltipCharacters) ?? ""
+        if button.toolTip != tooltip {
+            button.toolTip = tooltip
+        }
+    }
+
+    private func installClipboardPreviewStatusItem() -> NSStatusItem {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = Self.clipboardPreviewAutosaveName
+        item.behavior = []
+        // Registered before it is shown, for the same reason as
+        // installMetricStatusItem: showing it writes and announces its
+        // remembered position while this call is still on the stack.
+        clipboardPreviewStatusItem = item
+        item.isVisible = true
+        if let button = item.button {
+            button.font = MenuBarRenderer.statusFont(stacked: false)
+            button.alignment = .left
+            button.cell?.lineBreakMode = .byClipping
+            button.cell?.usesSingleLineMode = true
+            button.target = self
+            button.action = #selector(clipboardPreviewClicked)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        return item
+    }
+
+    @objc private func clipboardPreviewClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            onRightClick?(clipboardPreviewStatusItem?.button)
+            return
+        }
+        onClipboardPreviewClick?()
+    }
+
+    private func removeClipboardPreviewStatusItem() {
+        guard let item = clipboardPreviewStatusItem else { return }
+        clipboardPreviewStatusItem = nil
         NSStatusBar.system.removeStatusItem(item)
     }
 }

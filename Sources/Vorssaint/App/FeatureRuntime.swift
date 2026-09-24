@@ -182,6 +182,7 @@ final class FeatureRuntime: ObservableObject {
         .windowLayout: {
             WindowUseTracker.shared.syncWithFeatures()
             WindowLayoutService.shared.syncWithPreferences()
+            PointerDisplayService.shared.syncWithPreferences()
         },
         .autoQuit: { AutoQuitService.shared.syncWithPreferences() },
         .scrollInverter: { ScrollInverter.shared.syncWithPreferences() },
@@ -256,6 +257,7 @@ final class FeatureRuntime: ObservableObject {
             RecentCaptureService.shared.syncWithPreferences()
         },
         .cameraPreview: { CameraPreviewService.shared.syncWithPreferences() },
+        .wallpaper: { WallpaperService.shared.syncWithPreferences() },
         .radialMenu: { RadialMenuService.shared.syncWithPreferences() },
         .notch: { NotchService.shared.syncWithPreferences() },
         .notchGestures: {
@@ -285,6 +287,10 @@ final class FeatureRuntime: ObservableObject {
         .notchCalendar: {
             if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
             else { NotchCalendarService.shared.stop() }
+        },
+        .notchAgents: {
+            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
+            else { AgentUsageService.shared.stop() }
         },
         .scratchpad: { ScratchpadService.shared.syncWithPreferences() },
         .commandBar: { CommandBarService.shared.syncWithPreferences() },

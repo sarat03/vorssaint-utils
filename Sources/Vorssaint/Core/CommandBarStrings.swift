@@ -40,6 +40,7 @@ struct CommandBarFeatureStrings {
     let answerStorageLabel: String
     let answerStorageFormat: String
     let copyHint: String
+    let copyFailed: String
     let kindWindow: String
     let quitFormat: String
     let quitConfirmFormat: String
@@ -146,6 +147,7 @@ struct CommandBarFeatureStrings {
     let linkKindScript: String
     let scriptHint: String
     let scriptRunsWithoutArgument: String
+    let scriptRunsDirectly: String
     let scriptRunFailed: String
     let scriptSearchHint: String
     let scriptBareSearchHint: String
@@ -168,6 +170,8 @@ struct CommandBarFeatureStrings {
     let compactModeCaption: String
     let emojiSkinToneLabel: String
     let emojiSkinToneCaption: String
+    let asciiLayoutToggle: String
+    let asciiLayoutCaption: String
 }
 
 extension FeatureStrings {
@@ -225,6 +229,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Storage",
         answerStorageFormat: "%@ available of %@",
         copyHint: "Return copies",
+        copyFailed: "Couldn’t copy",
         kindWindow: "Window",
         quitFormat: "Quit %@",
         quitConfirmFormat: "Quit %@?",
@@ -331,6 +336,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Script",
         scriptHint: "Choose an executable file. Type its name followed by what you want to send. It runs when you pause and shows the result here.",
         scriptRunsWithoutArgument: "Also run when its name is typed on its own",
+        scriptRunsDirectly: "Run from its global shortcut without opening the bar",
         scriptRunFailed: "Couldn’t run this file",
         scriptSearchHint: "Type what to send after the name",
         scriptBareSearchHint: "Runs on its own, or type what to send",
@@ -352,7 +358,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Compact mode",
         compactModeCaption: "Bar opens without suggestions. Results appear as you type.",
         emojiSkinToneLabel: "Skin tone",
-        emojiSkinToneCaption: "By default, emoji that can take a tone use this one. Open the actions on an emoji row to choose a different one.")
+        emojiSkinToneCaption: "By default, emoji that can take a tone use this one. Open the actions on an emoji row to choose a different one.",
+        asciiLayoutToggle: "Switch to an ABC layout while the bar is open",
+        asciiLayoutCaption: "The field types Latin characters whatever layout was active, and the previous layout comes back when the bar closes.")
 
     static let ptBR = CommandBarFeatureStrings(
         pageTitle: "Barra de comando",
@@ -388,6 +396,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Armazenamento",
         answerStorageFormat: "%@ disponíveis de %@",
         copyHint: "Return copia",
+        copyFailed: "Não foi possível copiar",
         kindWindow: "Janela",
         quitFormat: "Encerrar %@",
         quitConfirmFormat: "Encerrar %@?",
@@ -494,6 +503,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Script",
         scriptHint: "Escolha um arquivo executável. Digite o nome seguido do que deseja enviar. Ele roda quando você para e mostra o resultado aqui.",
         scriptRunsWithoutArgument: "Executar também quando o nome for digitado sozinho",
+        scriptRunsDirectly: "Executar pelo atalho global sem abrir a barra",
         scriptRunFailed: "Não foi possível executar este arquivo",
         scriptSearchHint: "Digite o que enviar depois do nome",
         scriptBareSearchHint: "Roda sozinho, ou digite o que enviar",
@@ -515,7 +525,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Modo compacto",
         compactModeCaption: "A barra abre sem sugestões. Os resultados aparecem conforme você digita.",
         emojiSkinToneLabel: "Tom de pele",
-        emojiSkinToneCaption: "Por padrão, os emojis que aceitam tom usam este. Abra as ações em uma linha de emoji para escolher outro.")
+        emojiSkinToneCaption: "Por padrão, os emojis que aceitam tom usam este. Abra as ações em uma linha de emoji para escolher outro.",
+        asciiLayoutToggle: "Mudar para um layout ABC enquanto a barra está aberta",
+        asciiLayoutCaption: "O campo digita caracteres latinos independente do layout ativo, e o layout anterior volta quando a barra fecha.")
 
     static let tr = CommandBarFeatureStrings(
         pageTitle: "Komut çubuğu",
@@ -551,6 +563,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Depolama",
         answerStorageFormat: "%@ kullanılabilir / %@",
         copyHint: "Return kopyalar",
+        copyFailed: "Kopyalanamadı",
         kindWindow: "Pencere",
         quitFormat: "%@ uygulamasını kapat",
         quitConfirmFormat: "%@ kapatılsın mı?",
@@ -657,6 +670,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Betik",
         scriptHint: "Çalıştırılabilir bir dosya seçin. Adını ve ardından göndermek istediğiniz metni yazın. Durduğunuzda çalışır ve sonucu burada gösterir.",
         scriptRunsWithoutArgument: "Adı tek başına yazıldığında da çalıştır",
+        scriptRunsDirectly: "Genel kısayolundan, alanı açmadan çalıştır",
         scriptRunFailed: "Bu dosya çalıştırılamadı",
         scriptSearchHint: "Addan sonra göndermek istediğinizi yazın",
         scriptBareSearchHint: "Tek başına çalışır, ya da göndereceğinizi yazın",
@@ -678,7 +692,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Kompakt mod",
         compactModeCaption: "Çubuk önerilmeden açılır. Sonuçlar siz yazdıkça görünür.",
         emojiSkinToneLabel: "Ten rengi",
-        emojiSkinToneCaption: "Ton alabilen emojiler varsayılan olarak bunu kullanır. Farklı birini seçmek için bir emoji satırında eylemleri açın.")
+        emojiSkinToneCaption: "Ton alabilen emojiler varsayılan olarak bunu kullanır. Farklı birini seçmek için bir emoji satırında eylemleri açın.",
+        asciiLayoutToggle: "Çubuk açıkken ABC düzene geç",
+        asciiLayoutCaption: "Alan, etkin düzen ne olursa olsun Latin karakterler yazar; çubuk kapandığında önceki düzen geri gelir.")
 
     static let ru = CommandBarFeatureStrings(
         pageTitle: "Командная панель",
@@ -714,6 +730,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Хранилище",
         answerStorageFormat: "%@ доступно из %@",
         copyHint: "Return копирует",
+        copyFailed: "Не удалось скопировать",
         kindWindow: "Окно",
         quitFormat: "Завершить %@",
         quitConfirmFormat: "Завершить %@?",
@@ -820,6 +837,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Скрипт",
         scriptHint: "Выберите исполняемый файл. Введите имя и затем то, что хотите передать. После паузы файл запустится и покажет результат здесь.",
         scriptRunsWithoutArgument: "Запускать и тогда, когда введено только имя",
+        scriptRunsDirectly: "Запускать глобальным сочетанием, не открывая панель",
         scriptRunFailed: "Не удалось запустить этот файл",
         scriptSearchHint: "После имени введите то, что нужно передать",
         scriptBareSearchHint: "Запускается сам, или введите то, что нужно передать",
@@ -841,7 +859,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Компактный режим",
         compactModeCaption: "Строка открывается без подсказок. Результаты появляются по мере ввода.",
         emojiSkinToneLabel: "Тон кожи",
-        emojiSkinToneCaption: "По умолчанию эмодзи с поддержкой тона используют этот. Чтобы выбрать другой, откройте действия в строке эмодзи.")
+        emojiSkinToneCaption: "По умолчанию эмодзи с поддержкой тона используют этот. Чтобы выбрать другой, откройте действия в строке эмодзи.",
+        asciiLayoutToggle: "Переключаться на ABC-раскладку, пока открыта строка",
+        asciiLayoutCaption: "Поле набирает латиницу, какая бы раскладка ни была активна; при закрытии строки прежняя раскладка возвращается.")
 
     static let es = CommandBarFeatureStrings(
         pageTitle: "Barra de comandos",
@@ -877,6 +897,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Almacenamiento",
         answerStorageFormat: "%@ disponibles de %@",
         copyHint: "Retorno copia",
+        copyFailed: "No se pudo copiar",
         kindWindow: "Ventana",
         quitFormat: "Salir de %@",
         quitConfirmFormat: "¿Salir de %@?",
@@ -983,6 +1004,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Script",
         scriptHint: "Elige un archivo ejecutable. Escribe su nombre seguido de lo que quieras enviar. Se ejecuta al hacer una pausa y muestra el resultado aquí.",
         scriptRunsWithoutArgument: "Ejecutar también cuando se escriba solo el nombre",
+        scriptRunsDirectly: "Ejecutar con su atajo global sin abrir la barra",
         scriptRunFailed: "No se pudo ejecutar este archivo",
         scriptSearchHint: "Escribe lo que quieras enviar después del nombre",
         scriptBareSearchHint: "Se ejecuta solo, o escribe lo que quieras enviar",
@@ -1004,7 +1026,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Modo compacto",
         compactModeCaption: "La barra se abre sin sugerencias. Los resultados aparecen mientras escribes.",
         emojiSkinToneLabel: "Tono de piel",
-        emojiSkinToneCaption: "De forma predeterminada, los emojis que admiten tono usan este. Abre las acciones en una fila de emoji para elegir otro.")
+        emojiSkinToneCaption: "De forma predeterminada, los emojis que admiten tono usan este. Abre las acciones en una fila de emoji para elegir otro.",
+        asciiLayoutToggle: "Cambiar a una disposición ABC mientras la barra esté abierta",
+        asciiLayoutCaption: "El campo escribe caracteres latinos aunque haya otra disposición activa, y la anterior vuelve al cerrar la barra.")
 
     static let de = CommandBarFeatureStrings(
         pageTitle: "Befehlsleiste",
@@ -1040,6 +1064,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Speicherplatz",
         answerStorageFormat: "%@ verfügbar von %@",
         copyHint: "Return kopiert",
+        copyFailed: "Kopieren fehlgeschlagen",
         kindWindow: "Fenster",
         quitFormat: "%@ beenden",
         quitConfirmFormat: "%@ beenden?",
@@ -1146,6 +1171,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Skript",
         scriptHint: "Wählen Sie eine ausführbare Datei. Geben Sie den Namen und danach den gewünschten Text ein. Nach einer Pause wird das Ergebnis hier angezeigt.",
         scriptRunsWithoutArgument: "Auch ausführen, wenn nur der Name eingegeben wird",
+        scriptRunsDirectly: "Über den globalen Kurzbefehl ausführen, ohne die Leiste zu öffnen",
         scriptRunFailed: "Diese Datei konnte nicht ausgeführt werden",
         scriptSearchHint: "Geben Sie nach dem Namen ein, was gesendet werden soll",
         scriptBareSearchHint: "Läuft von selbst, oder geben Sie ein, was gesendet werden soll",
@@ -1167,7 +1193,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Kompaktmodus",
         compactModeCaption: "Die Leiste öffnet sich ohne Vorschläge. Die Ergebnisse erscheinen beim Tippen.",
         emojiSkinToneLabel: "Hautton",
-        emojiSkinToneCaption: "Emojis mit Hautton verwenden standardmäßig diesen. Öffne die Aktionen in einer Emoji-Zeile, um einen anderen zu wählen.")
+        emojiSkinToneCaption: "Emojis mit Hautton verwenden standardmäßig diesen. Öffne die Aktionen in einer Emoji-Zeile, um einen anderen zu wählen.",
+        asciiLayoutToggle: "Bei geöffneter Leiste zum ABC-Layout wechseln",
+        asciiLayoutCaption: "Das Feld tippt lateinische Zeichen, egal welches Layout aktiv ist; beim Schließen kehrt das vorherige Layout zurück.")
 
     static let fr = CommandBarFeatureStrings(
         pageTitle: "Barre de commande",
@@ -1203,6 +1231,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Stockage",
         answerStorageFormat: "%@ disponibles sur %@",
         copyHint: "Retour copie",
+        copyFailed: "Impossible de copier",
         kindWindow: "Fenêtre",
         quitFormat: "Quitter %@",
         quitConfirmFormat: "Quitter %@\u{00A0}?",
@@ -1309,6 +1338,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Script",
         scriptHint: "Choisissez un fichier exécutable. Saisissez son nom suivi du texte à envoyer. Après une pause, le résultat s’affiche ici.",
         scriptRunsWithoutArgument: "Exécuter aussi lorsque le nom est saisi seul",
+        scriptRunsDirectly: "Lancer par son raccourci global sans ouvrir la barre",
         scriptRunFailed: "Impossible d’exécuter ce fichier",
         scriptSearchHint: "Saisissez ce qui sera envoyé après le nom",
         scriptBareSearchHint: "S’exécute seul, ou saisissez ce qui sera envoyé",
@@ -1330,7 +1360,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Mode compact",
         compactModeCaption: "La barre s’ouvre sans suggestions. Les résultats apparaissent à mesure que vous tapez.",
         emojiSkinToneLabel: "Teinte de peau",
-        emojiSkinToneCaption: "Par défaut, les émojis qui acceptent une teinte utilisent celle-ci. Ouvrez les actions sur une ligne d’émoji pour en choisir une autre.")
+        emojiSkinToneCaption: "Par défaut, les émojis qui acceptent une teinte utilisent celle-ci. Ouvrez les actions sur une ligne d’émoji pour en choisir une autre.",
+        asciiLayoutToggle: "Passer en disposition ABC quand la barre est ouverte",
+        asciiLayoutCaption: "Le champ saisit des caractères latins quelle que soit la disposition active, et la précédente revient à la fermeture de la barre.")
 
     static let it = CommandBarFeatureStrings(
         pageTitle: "Barra dei comandi",
@@ -1366,6 +1398,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "Archiviazione",
         answerStorageFormat: "%@ disponibili su %@",
         copyHint: "Invio copia",
+        copyFailed: "Impossibile copiare",
         kindWindow: "Finestra",
         quitFormat: "Esci da %@",
         quitConfirmFormat: "Uscire da %@?",
@@ -1472,6 +1505,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "Script",
         scriptHint: "Scegli un file eseguibile. Digita il nome seguito dal testo da inviare. Dopo una pausa, il risultato appare qui.",
         scriptRunsWithoutArgument: "Esegui anche quando il nome è digitato da solo",
+        scriptRunsDirectly: "Esegui con la sua abbreviazione globale senza aprire la barra",
         scriptRunFailed: "Impossibile eseguire questo file",
         scriptSearchHint: "Digita cosa inviare dopo il nome",
         scriptBareSearchHint: "Si esegue da solo, o digita cosa inviare",
@@ -1493,7 +1527,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "Modalità compatta",
         compactModeCaption: "La barra si apre senza suggerimenti. I risultati appaiono mentre scrivi.",
         emojiSkinToneLabel: "Tonalità della pelle",
-        emojiSkinToneCaption: "Per impostazione predefinita, le emoji che accettano una tonalità usano questa. Apri le azioni su una riga di emoji per sceglierne un’altra.")
+        emojiSkinToneCaption: "Per impostazione predefinita, le emoji che accettano una tonalità usano questa. Apri le azioni su una riga di emoji per sceglierne un’altra.",
+        asciiLayoutToggle: "Passa a un layout ABC mentre la barra è aperta",
+        asciiLayoutCaption: "Il campo digita caratteri latini indipendentemente dal layout attivo; alla chiusura torna il layout precedente.")
 
     static let ja = CommandBarFeatureStrings(
         pageTitle: "コマンドバー",
@@ -1529,6 +1565,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "ストレージ",
         answerStorageFormat: "利用可能 %@ / %@",
         copyHint: "Return でコピー",
+        copyFailed: "コピーできませんでした",
         kindWindow: "ウインドウ",
         quitFormat: "%@を終了",
         quitConfirmFormat: "%@を終了しますか？",
@@ -1635,6 +1672,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "スクリプト",
         scriptHint: "実行可能なファイルを選びます。名前に続けて渡したい内容を入力すると、入力を止めた後に結果がここへ表示されます。",
         scriptRunsWithoutArgument: "名前だけを入力したときにも実行する",
+        scriptRunsDirectly: "グローバルショートカットでバーを開かずに実行",
         scriptRunFailed: "このファイルを実行できませんでした",
         scriptSearchHint: "名前の後に渡したい内容を入力",
         scriptBareSearchHint: "そのまま実行、または渡したい内容を入力",
@@ -1656,7 +1694,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "コンパクトモード",
         compactModeCaption: "バーは候補なしで開きます。入力すると結果が現れます。",
         emojiSkinToneLabel: "肌の色",
-        emojiSkinToneCaption: "肌の色を持てる絵文字は標準でこの色になります。別の色を選ぶには、絵文字の行でアクションを開きます。")
+        emojiSkinToneCaption: "肌の色を持てる絵文字は標準でこの色になります。別の色を選ぶには、絵文字の行でアクションを開きます。",
+        asciiLayoutToggle: "バーを開いている間はABCレイアウトに切り替える",
+        asciiLayoutCaption: "アクティブなレイアウトに関係なく、フィールドにはラテン文字が入力されます。バーを閉じると元のレイアウトに戻ります。")
 
     static let ko = CommandBarFeatureStrings(
         pageTitle: "명령 막대",
@@ -1692,6 +1732,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "저장 공간",
         answerStorageFormat: "%@ 사용 가능 / %@",
         copyHint: "Return으로 복사",
+        copyFailed: "복사할 수 없습니다",
         kindWindow: "윈도우",
         quitFormat: "%@ 종료",
         quitConfirmFormat: "%@을(를) 종료할까요?",
@@ -1798,6 +1839,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "스크립트",
         scriptHint: "실행 가능한 파일을 선택하세요. 이름 뒤에 전달할 내용을 입력하면 멈춘 뒤 결과가 여기에 표시됩니다.",
         scriptRunsWithoutArgument: "이름만 입력했을 때도 실행",
+        scriptRunsDirectly: "전역 단축키로 막대를 열지 않고 실행",
         scriptRunFailed: "이 파일을 실행할 수 없습니다",
         scriptSearchHint: "이름 뒤에 전달할 내용을 입력하세요",
         scriptBareSearchHint: "이름만으로 실행되거나, 전달할 내용을 입력하세요",
@@ -1819,7 +1861,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "컴팩트 모드",
         compactModeCaption: "막대가 추천 없이 열립니다. 입력하면 결과가 나타납니다.",
         emojiSkinToneLabel: "피부색",
-        emojiSkinToneCaption: "기본적으로 피부색을 가질 수 있는 이모티콘은 이 색을 사용합니다. 다른 색을 선택하려면 이모티콘 행에서 동작을 여세요.")
+        emojiSkinToneCaption: "기본적으로 피부색을 가질 수 있는 이모티콘은 이 색을 사용합니다. 다른 색을 선택하려면 이모티콘 행에서 동작을 여세요.",
+        asciiLayoutToggle: "막대가 열려 있는 동안 ABC 자판으로 전환",
+        asciiLayoutCaption: "활성 자판과 관계없이 입력 필드에는 라틴 문자가 입력되고, 막대를 닫으면 이전 자판으로 돌아갑니다.")
 
     static let zhHans = CommandBarFeatureStrings(
         pageTitle: "命令栏",
@@ -1855,6 +1899,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "存储空间",
         answerStorageFormat: "可用 %@ / %@",
         copyHint: "Return 拷贝",
+        copyFailed: "无法拷贝",
         kindWindow: "窗口",
         quitFormat: "退出“%@”",
         quitConfirmFormat: "要退出“%@”吗？",
@@ -1961,6 +2006,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "脚本",
         scriptHint: "选择一个可执行文件。输入名称，再输入要传递的内容。停止输入后会在这里显示结果。",
         scriptRunsWithoutArgument: "仅输入名称时也运行",
+        scriptRunsDirectly: "按全局快捷键直接运行，不打开命令栏",
         scriptRunFailed: "无法运行此文件",
         scriptSearchHint: "在名称后输入要传递的内容",
         scriptBareSearchHint: "可直接运行，或输入要传递的内容",
@@ -1982,7 +2028,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "紧凑模式",
         compactModeCaption: "命令栏打开时不显示建议，输入时才显示结果。",
         emojiSkinToneLabel: "肤色",
-        emojiSkinToneCaption: "支持肤色的表情默认使用此肤色。若要选择其他肤色，请在表情结果行打开操作。")
+        emojiSkinToneCaption: "支持肤色的表情默认使用此肤色。若要选择其他肤色，请在表情结果行打开操作。",
+        asciiLayoutToggle: "命令栏打开时切换到 ABC 布局",
+        asciiLayoutCaption: "无论当前布局为何，输入栏都会键入拉丁字符；命令栏关闭后恢复原布局。")
 
     static let zhTW = CommandBarFeatureStrings(
         pageTitle: "指令列",
@@ -2018,6 +2066,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "儲存空間",
         answerStorageFormat: "可用 %@ / %@",
         copyHint: "Return 拷貝",
+        copyFailed: "無法拷貝",
         kindWindow: "視窗",
         quitFormat: "結束%@",
         quitConfirmFormat: "要結束%@嗎？",
@@ -2124,6 +2173,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "腳本",
         scriptHint: "選擇一個可執行檔案。輸入名稱，再輸入要傳送的內容。停止輸入後會在這裡顯示結果。",
         scriptRunsWithoutArgument: "僅輸入名稱時也執行",
+        scriptRunsDirectly: "按全域快速鍵直接執行，不開啟指令列",
         scriptRunFailed: "無法執行此檔案",
         scriptSearchHint: "在名稱後輸入要傳送的內容",
         scriptBareSearchHint: "可直接執行，或輸入要傳送的內容",
@@ -2145,7 +2195,9 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "精簡模式",
         compactModeCaption: "命令列打開時不顯示建議，輸入時才顯示結果。",
         emojiSkinToneLabel: "膚色",
-        emojiSkinToneCaption: "支援膚色的表情符號預設使用此膚色。若要選擇其他膚色，請在表情符號列打開動作。")
+        emojiSkinToneCaption: "支援膚色的表情符號預設使用此膚色。若要選擇其他膚色，請在表情符號列打開動作。",
+        asciiLayoutToggle: "指令列開啟時切換到 ABC 配置",
+        asciiLayoutCaption: "無論目前配置為何，輸入欄都會鍵入拉丁字元；指令列關閉後恢復原配置。")
 
     static let zhHK = CommandBarFeatureStrings(
         pageTitle: "指令列",
@@ -2181,6 +2233,7 @@ extension CommandBarFeatureStrings {
         answerStorageLabel: "儲存空間",
         answerStorageFormat: "可用 %@ / %@",
         copyHint: "Return 拷貝",
+        copyFailed: "無法拷貝",
         kindWindow: "視窗",
         quitFormat: "結束%@",
         quitConfirmFormat: "要結束%@嗎？",
@@ -2287,6 +2340,7 @@ extension CommandBarFeatureStrings {
         linkKindScript: "腳本",
         scriptHint: "選擇一個可執行檔案。輸入名稱，再輸入要傳送的內容。停止輸入後會在這裡顯示結果。",
         scriptRunsWithoutArgument: "僅輸入名稱時也執行",
+        scriptRunsDirectly: "按全域快速鍵直接執行，不開啟指令列",
         scriptRunFailed: "無法執行此檔案",
         scriptSearchHint: "在名稱後輸入要傳送的內容",
         scriptBareSearchHint: "可直接執行，或輸入要傳送的內容",
@@ -2308,5 +2362,7 @@ extension CommandBarFeatureStrings {
         compactModeToggle: "精簡模式",
         compactModeCaption: "命令列打開時不顯示建議，輸入時才顯示結果。",
         emojiSkinToneLabel: "膚色",
-        emojiSkinToneCaption: "支援膚色的表情符號預設使用此膚色。若要選擇其他膚色，請在表情符號列打開動作。")
+        emojiSkinToneCaption: "支援膚色的表情符號預設使用此膚色。若要選擇其他膚色，請在表情符號列打開動作。",
+        asciiLayoutToggle: "指令列開啟時切換到 ABC 配置",
+        asciiLayoutCaption: "無論目前配置為何，輸入欄都會鍵入拉丁字元；指令列關閉後恢復原配置。")
 }

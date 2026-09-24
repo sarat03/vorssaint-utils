@@ -293,11 +293,13 @@ struct ShortcutPreferenceRow: View {
     private let showsSuperKeyAlternative: Bool
     private let superKeyModifiers: GlobalShortcutModifiers
     private let includeInactiveConflicts: Bool
+    private let reservesClearButtonSpace: Bool
     private let onChange: () -> Void
     private let additionalConflict: (GlobalShortcut) -> String?
     @AppStorage private var rawValue: String
     @State private var errorText: String?
     @State private var isRecording = false
+    @State private var pendingTakeOver: GlobalShortcut?
 
     init(role: GlobalShortcutRole,
          isEnabled: Bool = true,
@@ -309,6 +311,7 @@ struct ShortcutPreferenceRow: View {
          showsSuperKeyAlternative: Bool = false,
          superKeyModifiers: GlobalShortcutModifiers = .validMask,
          includeInactiveConflicts: Bool = false,
+         reservesClearButtonSpace: Bool = false,
          additionalConflict: @escaping (GlobalShortcut) -> String? = { _ in nil },
          onChange: @escaping () -> Void) {
         self.role = role
@@ -321,6 +324,7 @@ struct ShortcutPreferenceRow: View {
         self.showsSuperKeyAlternative = showsSuperKeyAlternative
         self.superKeyModifiers = superKeyModifiers
         self.includeInactiveConflicts = includeInactiveConflicts
+        self.reservesClearButtonSpace = reservesClearButtonSpace
         self.additionalConflict = additionalConflict
         self.onChange = onChange
         _rawValue = AppStorage(wrappedValue: role.defaultShortcut.storageValue, role.storageKey)
@@ -337,13 +341,16 @@ struct ShortcutPreferenceRow: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
                     HStack(spacing: 8) {
-                        ShortcutRecorderButton(shortcut: shortcut,
+                        ShortcutRecorderButton(shortcut: pendingTakeOver ?? shortcut,
                                                isEnabled: isEnabled,
                                                waitingTitle: l10n.s.shortcutPressKeys,
                                                notCapturedAction: { errorText = l10n.s.shortcutNotCaptured },
                                                recordingChanged: { recording in
                                                    isRecording = recording
-                                                   if recording { errorText = nil }
+                                                   if recording {
+                                                       errorText = nil
+                                                       pendingTakeOver = nil
+                                                   }
                                                },
                                                invalidAction: {
                                                    errorText = l10n.s.shortcutInvalid
@@ -351,9 +358,18 @@ struct ShortcutPreferenceRow: View {
                                                captureAction: save)
                             .frame(width: 108)
                             .disabled(!isEnabled)
+                        if reservesClearButtonSpace {
+                            // Rows beside it have a clear button here; keep the
+                            // recorders in one column.
+                            Image(systemName: "xmark.circle.fill")
+                                .hidden()
+                                .accessibilityHidden(true)
+                        }
                         Button(l10n.s.shortcutReset) {
                             rawValue = role.defaultShortcut.storageValue
                             errorText = nil
+                            pendingTakeOver = nil
+                            SystemShortcutTakeover.setTakeOver(role.storageKey, false)
                             onChange()
                         }
                         .disabled(!isEnabled || shortcut == role.defaultShortcut)
@@ -377,6 +393,19 @@ struct ShortcutPreferenceRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let pendingTakeOver {
+                SystemShortcutTakeOverOffer(shortcut: pendingTakeOver,
+                                            onAccept: {
+                                                rawValue = pendingTakeOver.storageValue
+                                                SystemShortcutTakeover.setTakeOver(role.storageKey, true)
+                                                self.pendingTakeOver = nil
+                                                onChange()
+                                            },
+                                            onDismiss: {
+                                                self.pendingTakeOver = nil
+                                                errorText = String(format: l10n.s.shortcutConflictFormat, "macOS")
+                                            })
+            }
         }
         .onChange(of: l10n.language) { _, _ in errorText = nil }
     }
@@ -399,16 +428,37 @@ struct ShortcutPreferenceRow: View {
             errorText = String(format: l10n.s.shortcutConflictFormat, conflict.title(l10n.s))
             return
         }
-        if shortcut.conflictsWithSystemShortcut(for: role) {
-            errorText = String(format: l10n.s.shortcutConflictFormat, "macOS")
-            return
-        }
         if let conflict = additionalConflict(shortcut) {
             errorText = String(format: l10n.s.shortcutConflictFormat, conflict)
             return
         }
-        rawValue = shortcut.storageValue
-        errorText = nil
+        // Nothing claims this row's key, so accepting an offer would write an
+        // opt-in no feature ever resolves: refuse the combination the way the
+        // row did before the take-over existed. The live table alone is the
+        // right question here, and its blindness to a key already switched off
+        // is what still lets the switcher's rows record the ids its own
+        // take-over toggle is holding.
+        if !role.supportsTakeOver, shortcut.conflictsWithSystemShortcut(for: role) {
+            errorText = String(format: l10n.s.shortcutConflictFormat, "macOS")
+            return
+        }
+        // The offer is the last word on a combination: every other check has
+        // already passed, so accepting it writes exactly what a save writes.
+        switch SystemShortcutTakeoverSupport.recorderDecision(
+            shortcut: shortcut,
+            conflictsWithMacOS: role.supportsTakeOver
+                && SystemShortcutTakeover.conflictsWithMacOS(shortcut, for: role),
+            takenOver: SystemShortcutTakeover.isTakenOver(role.storageKey),
+            current: GlobalShortcut(storageValue: rawValue)) {
+        case .offer:
+            pendingTakeOver = shortcut
+            errorText = nil
+            return
+        case .save(let clearTakeOver):
+            rawValue = shortcut.storageValue
+            errorText = nil
+            if clearTakeOver { SystemShortcutTakeover.setTakeOver(role.storageKey, false) }
+        }
         onChange()
     }
 }

@@ -143,6 +143,7 @@ struct BrightnessSection: View {
                     .disabled(service.isDisplayPending(display.id))
                     .accessibilityLabel(display.name)
             }
+            SoftwareDimmingButton(display: display, compact: true)
         }
     }
 
@@ -200,6 +201,50 @@ private struct ExtraBrightnessPanelToggle: View {
     }
 }
 
+/// Shared routing choice, on every surface that shows the display rows: the
+/// slider is just as dead on the Energy page as in the panel, so the way out
+/// has to be there too.
+///
+/// Offered only where the routing is genuinely ambiguous: a channel that takes
+/// writes and answers no reads either drives the panel or swallows everything,
+/// and the bus cannot tell which (issue #1589). Stays visible once chosen, or
+/// there would be no way back to DDC.
+struct SoftwareDimmingButton: View {
+    @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var service = BrightnessService.shared
+    let display: BrightnessDisplay
+    var compact = false
+
+    private var strings: BrightnessFeatureStrings { FeatureStrings.brightness(l10n.language) }
+    private var chosen: Bool { service.softwareDimmingPreferred.contains(display.id) }
+
+    private var offered: Bool {
+        guard display.isActive, !display.isBuiltIn else { return false }
+        if chosen { return true }
+        return display.method == .ddc && !display.readable
+    }
+
+    var body: some View {
+        if offered {
+            Button {
+                service.setSoftwareDimmingPreferred(!chosen, for: display.id)
+            } label: {
+                HStack(spacing: compact ? 4 : 5) {
+                    Image(systemName: chosen ? "checkmark.circle.fill" : "circle.lefthalf.filled")
+                        .font(.system(size: compact ? 9.5 : 11, weight: .semibold))
+                    Text(strings.softwareDimming)
+                        .font(.system(size: compact ? 10 : 12, weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(chosen ? Color.accentColor : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(service.isDisplayPending(display.id))
+            .accessibilityLabel("\(display.name): \(strings.softwareDimming)")
+        }
+    }
+}
+
 /// Shared power affordance used by Settings and the menu bar panel. It stays
 /// icon-only in the row, with a localized tooltip and accessibility label.
 struct DisplayPowerButton: View {
@@ -250,5 +295,6 @@ func displayControlFailureText(_ failure: BrightnessService.DisplayControlFailur
     case .unavailable: return strings.switchUnavailable
     case .lastActive: return strings.lastDisplayCaption
     case .failed: return strings.switchFailed
+    case .closedLid: return strings.openLidToEnable
     }
 }

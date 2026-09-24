@@ -11,6 +11,7 @@ struct CommandBarSettings: View {
     @AppStorage(DefaultsKey.commandBarShortcutEnabled) private var shortcutEnabled = false
     @AppStorage(DefaultsKey.commandBarCompactMode) private var compactMode = false
     @AppStorage(DefaultsKey.commandBarEmojiSkinTone) private var emojiSkinTone = ""
+    @AppStorage(DefaultsKey.commandBarASCIILayoutEnabled) private var asciiLayoutEnabled = false
     @AppStorage(DefaultsKey.commandBarDisabledSources) private var disabledSources = ""
     @AppStorage(DefaultsKey.commandBarAliases) private var aliasesRaw = ""
     @AppStorage(DefaultsKey.commandBarPins) private var pinsRaw = ""
@@ -22,6 +23,7 @@ struct CommandBarSettings: View {
     @State private var editing: CommandBarLink?
     @State private var ignoreDraft = ""
     @State private var showsFileOptions = false
+    @State private var showsLayoutOptions = false
     @State private var showsAppShortcuts = false
 
     private var text: CommandBarFeatureStrings { FeatureStrings.commandBar(l10n.language) }
@@ -110,6 +112,19 @@ struct CommandBarSettings: View {
                 }
                 if secureInput.holder != .off {
                     SecureInputRow()
+                }
+                DisclosureHeaderRow(isExpanded: $showsLayoutOptions) {
+                    Text(FeatureStrings.recorder(l10n.language).moreOptions)
+                    Spacer()
+                }
+                if showsLayoutOptions {
+                    // Like compact mode this needs no callback: the bar reads
+                    // the toggle on every open, so there is no live state to
+                    // sync.
+                    Toggle(text.asciiLayoutToggle, isOn: $asciiLayoutEnabled)
+                    Text(text.asciiLayoutCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } header: {
                 Text(text.pageTitle)
@@ -438,6 +453,7 @@ struct CommandBarSettings: View {
             var current = CommandBarPreferences.disabledSources(from: disabledSources)
             if isOn { current.remove(source) } else { current.insert(source) }
             disabledSources = CommandBarPreferences.storageValue(for: current)
+            CommandBarService.shared.syncWithPreferences()
         }
     }
 
@@ -528,6 +544,7 @@ struct CommandBarSettings: View {
         var keys = CommandBarPreferences.decodeHidden(hiddenRaw)
         keys.remove(key)
         hiddenRaw = CommandBarPreferences.encodeHidden(keys)
+        CommandBarService.shared.syncWithPreferences()
     }
 }
 
@@ -617,6 +634,8 @@ private struct CommandBarLinkEditor: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Toggle(text.scriptRunsWithoutArgument, isOn: $draft.runsWithoutArgument)
+                        .font(.caption)
+                    Toggle(text.scriptRunsDirectly, isOn: $draft.runsDirectly)
                         .font(.caption)
                 }
             }

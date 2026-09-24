@@ -60,6 +60,7 @@ enum SettingsBackupSupport {
         DefaultsKey.notchQuickAccessSide,
         DefaultsKey.notchQuickAccessSecond,
         DefaultsKey.notchQuickAccessThird,
+        DefaultsKey.systemShortcutTakeOverKeys,
         // Experience flags: a restored Mac must not replay onboarding or the
         // feature intros the user has already been through.
         DefaultsKey.hasOnboarded,
@@ -76,12 +77,14 @@ enum SettingsBackupSupport {
     /// out by construction (they are not preference keys), listed here only
     /// when they would otherwise slip in through the registered set.
     static let machineStateKeys: Set<String> = [
+        DefaultsKey.dockPreviewRestoreAutohide,
         // A Bluetooth restore owed by one sleeping Mac means nothing on another.
         DefaultsKey.bluetoothSleepRestorePending,
         DefaultsKey.micMuteActive,
         DefaultsKey.micMuteSavedVolume,
         // Levels and device ids belong to the microphones of one Mac.
         DefaultsKey.micMuteSavedVolumes,
+        DefaultsKey.micMuteSavedChannelVolumes,
         DefaultsKey.micMuteMutedDevices,
         DefaultsKey.cleanerLastAutoRun,
         // When the last check ran and what it found belong to one Mac.
@@ -89,6 +92,7 @@ enum SettingsBackupSupport {
         DefaultsKey.appUpdatesLastCount,
         DefaultsKey.appUpdatesNotifiedIDs,
         DefaultsKey.cleanerLastAutoFreed,
+        DefaultsKey.cleanerLastAutoFailed,
         DefaultsKey.whatsAppDownloadsAutomaticStartDate,
         DefaultsKey.whatsAppDownloadsLastAutoRun,
         DefaultsKey.whatsAppDownloadsLastCleanup,
@@ -113,6 +117,8 @@ enum SettingsBackupSupport {
         // protected-folder prompt without a fresh choice.
         DefaultsKey.commandBarFileScopes,
         DefaultsKey.notchDownloadsFolderBookmark,
+        DefaultsKey.wallpaperOwnBookmarks,
+        DefaultsKey.wallpaperExcludedOwnPaths,
         // A local watermark file is authority on this Mac, not portable data.
         DefaultsKey.mediaImageWatermarkLogoPath,
         DefaultsKey.simulateUpdate,
@@ -132,10 +138,16 @@ enum SettingsBackupSupport {
         DefaultsKey.recorderSystemAudioTapVerified,
         DefaultsKey.fanControlRecoveryNeeded,
         DefaultsKey.fanControlHelperVersion,
+        // Control left running on one Mac must not start fans on another.
+        DefaultsKey.fanControlResumeConfiguration,
         DefaultsKey.switcherNativeHotkeysSuppressed,
         DefaultsKey.systemShortcutsSuppressed,
         // DDC capability belongs to one physical monitor on one Mac port.
         DefaultsKey.brightnessDDCWriteOnlyPaths,
+        // Restoring it would skip the one-time recheck of the cache above on
+        // a Mac that still holds its own stale verdicts.
+        DefaultsKey.brightnessDDCWriteOnlyPathsRechecked,
+        DefaultsKey.brightnessForcedSoftwarePaths,
     ]
 
     /// The file's content: an envelope with the format version, the app
