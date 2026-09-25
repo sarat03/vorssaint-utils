@@ -335,7 +335,18 @@ extension ScratchpadFeatureStrings {
         deletePadMessageFormat: "Vymazať „%@“ a celý jeho obsah?",
         padLimitFormat: "Maximálny počet poznámkových blokov: %d",
         previewFormatting: "Zobraziť formátovanie",
-        editText: "Upraviť text"
+        editText: "Upraviť text",
+        markBold: "Tučné",
+        markItalic: "Kurzíva",
+        markStrikethrough: "Prečiarknuté",
+        markHeading: "Nadpis",
+        markBullet: "Zoznam s odrážkami",
+        markNumbered: "Číslovaný zoznam",
+        markQuote: "Citát",
+        markCode: "Kód",
+        markLink: "Odkaz",
+        formatMarks: "Formátovanie",
+        textSize: "Veľkosť textu"
     )
 
     static let de = ScratchpadFeatureStrings(
@@ -737,7 +748,18 @@ extension ScratchpadFeatureStrings {
         deletePadMessageFormat: "Видалити «%@» та все в ньому?",
         padLimitFormat: "Ви можете зберігати до %d нотатників",
         previewFormatting: "Показувати форматування",
-        editText: "Редагувати текст"
+        editText: "Редагувати текст",
+        markBold: "Жирний",
+        markItalic: "Курсив",
+        markStrikethrough: "Закреслений",
+        markHeading: "Заголовок",
+        markBullet: "Маркований список",
+        markNumbered: "Нумерований список",
+        markQuote: "Цитата",
+        markCode: "Код",
+        markLink: "Посилання",
+        formatMarks: "Форматування",
+        textSize: "Розмір тексту"
     )
 }
 
