@@ -24,13 +24,13 @@ struct NotchNoticeView: View {
         HStack(spacing: 0) {
             leading
                 .padding(.leading, inset)
-                .padding(.trailing, notice.event == .battery ? 16 : 0)
+                .padding(.trailing, notice.cameraGap)
                 .frame(width: wingWidth, height: geometry.stripHeight)
                 .clipped()
             Color.clear.frame(width: geometry.noticeCameraGap)
             trailing
                 .padding(.trailing, inset)
-                .padding(.leading, notice.event == .battery ? 16 : 0)
+                .padding(.leading, notice.cameraGap)
                 .frame(width: wingWidth, height: geometry.stripHeight)
                 .clipped()
         }
@@ -56,6 +56,8 @@ struct NotchNoticeView: View {
                     // and renewals keep a symbol that says what happened.
                     if notice.event == .agents, let agent = notice.agent, notice.symbol == agent.symbol {
                         NotchAgentMark(provider: agent, size: 13)
+                    } else if notice.event == .track {
+                        NotchTrackArtwork(size: min(18, geometry.stripHeight - 6))
                     } else {
                         Image(systemName: notice.symbol)
                             .font(.system(size: 14, weight: .medium))
@@ -67,10 +69,10 @@ struct NotchNoticeView: View {
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .truncationMode(notice.event == .track ? .tail : .middle)
                     .contentTransition(.numericText())
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .frame(maxWidth: .infinity, alignment: notice.readsFromEnds ? .leading : .trailing)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: notice.detail)
             .transaction { $0.disablesAnimations = false }
         }
@@ -92,9 +94,18 @@ struct NotchNoticeView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.8))
                 .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .truncationMode(notice.event == .accessory ? .middle : .tail)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
+}
+
+/// The new song's cover, read as it arrives: it often lands after the title.
+private struct NotchTrackArtwork: View {
+    @ObservedObject private var music = NotchMusicService.shared
+    let size: CGFloat
+
+    var body: some View { NotchArtwork(image: music.artwork, size: size) }
 }
 
 /// Level feedback occupies the header while the current page stays usable.

@@ -90,7 +90,7 @@ struct NotchView: View {
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, service.geometry.safeContentTop)
-        } else if let notice = service.notice {
+        } else if let notice = service.notice ?? (service.peeking ? nil : service.departingNotice) {
             if service.noticeExpanded, let content = notice.notification {
                 NotchNotificationPreviewView(notice: notice, content: content, service: service)
                     .padding(.horizontal, NotchLayout.horizontalInset)
@@ -124,6 +124,7 @@ struct NotchView: View {
             case .timer: NotchTimerStrip(service: service)
             case .downloads: NotchDownloadStrip(service: service)
             case .agents: NotchAgentStrip(service: service)
+            case .calendar: NotchCalendarStrip(service: service)
             case .music: NotchMusicStrip(service: service)
             }
         } else {
@@ -287,8 +288,11 @@ struct NotchView: View {
                             .lineLimit(1)
                             .layoutPriority(-1)
                     }
-                    NotchSectionSearch(service: service, maximumFieldWidth: service.expandedGeometry.headerCameraGap > 0
-                                       ? max(24, (service.contentSize.width - service.expandedGeometry.headerCameraGap) / 2 - 100) : 150)
+                    // Beside the camera the field takes the rest of its side,
+                    // stopping a little short of the cutout.
+                    NotchSectionSearch(service: service,
+                                       maximumFieldWidth: service.expandedGeometry.headerCameraGap > 0 ? .infinity : 150)
+                        .padding(.trailing, service.expandedGeometry.headerCameraGap > 0 ? 6 : 0)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else if showsDetail || service.modules.isEmpty {
                     if showsDetail {

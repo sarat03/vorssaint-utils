@@ -166,6 +166,12 @@ enum NotchLayout {
     }
     /// Breathing room every compact strip keeps from its silhouette.
     static let compactEdgeGap: CGFloat = 5
+    /// The compact player's equalizer, spaced by its own bar width.
+    static let compactMusicBarCount = 7
+    static let compactMusicBarWidth: CGFloat = 1.8
+    static var compactMusicBarsWidth: CGFloat {
+        compactMusicBarWidth * (CGFloat(compactMusicBarCount) + CGFloat(compactMusicBarCount - 1) * 0.85)
+    }
     /// Corners of a surface of this height. A strip as tall as the camera
     /// keeps the cutout's own corners, so the closed island and the last
     /// frames of a collapse sit inside the notch instead of outlining a
@@ -323,13 +329,14 @@ struct NotchHoverState {
 }
 
 enum NotchCompactActivity: Equatable {
-    case timer, downloads, agents, music
+    case timer, downloads, agents, calendar, music
 
     var module: NotchModule {
         switch self {
         case .timer: return .timer
         case .downloads: return .downloads
         case .agents: return .agents
+        case .calendar: return .calendar
         case .music: return .music
         }
     }
@@ -593,10 +600,11 @@ enum NotchQuickAccessLayout {
 }
 
 enum NotchEvent: String, CaseIterable {
-    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents
+    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track
 
     var preferenceKey: String {
         switch self {
+        case .track: return DefaultsKey.notchTrackChange
         case .timer: return DefaultsKey.notchTimerEnabled
         case .accessory: return DefaultsKey.notchAccessoriesEnabled
         case .download: return DefaultsKey.notchDownloadsEnabled
@@ -616,14 +624,14 @@ enum NotchEvent: String, CaseIterable {
         case .volume, .brightness, .keyboardLight: return 3
         case .capture, .timer: return 2
         case .battery, .systemNotification, .accessory, .agents: return 1
-        case .clipboard, .download: return 0
+        case .clipboard, .download, .track: return 0
         }
     }
 
     var duration: TimeInterval {
         switch self {
         case .volume, .brightness, .keyboardLight: return 1.6
-        case .systemNotification: return 3
+        case .systemNotification, .track: return 3
         case .timer, .download: return 6
         case .agents: return 5
         case .battery, .accessory: return 4
@@ -662,13 +670,46 @@ enum NotchSupport {
         return modules[(index + (backwards ? modules.count - 1 : 1)) % modules.count]
     }
 
+    /// The arrow keys step through a searched list without wrapping; the
+    /// first press, or one after the highlighted row left the list, lands on
+    /// the top result.
+    static func steppedItem<ID: Equatable>(from current: ID?, in ids: [ID], backwards: Bool) -> ID? {
+        guard !ids.isEmpty else { return nil }
+        guard let current, let index = ids.firstIndex(of: current) else { return ids.first }
+        return ids[min(max(index + (backwards ? -1 : 1), 0), ids.count - 1)]
+    }
+
+    /// The row a search leaves highlighted: the current one while it is still
+    /// listed, otherwise the top result of a typed search, so Return pastes it
+    /// like the history window does. An empty search waits for the first arrow.
+    static func searchHighlight<ID: Equatable>(keeping current: ID?, in ids: [ID], query: String) -> ID? {
+        if let current, ids.contains(current) { return current }
+        return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : ids.first
+    }
+
     /// A working agent outranks the music it plays over: its turn ends on its
     /// own, while music is there all day.
-    static func compactActivity(timer: Bool, downloads: Bool, agents: Bool = false, music: Bool) -> NotchCompactActivity? {
+    static func compactActivity(timer: Bool, downloads: Bool, agents: Bool = false,
+                                calendar: Bool = false, music: Bool) -> NotchCompactActivity? {
         if timer { return .timer }
         if downloads { return .downloads }
         if agents { return .agents }
+        if calendar { return .calendar }
         return music ? .music : nil
+    }
+
+    /// The timer's orange clock says what it is on its own, so the wing its
+    /// mark would take shows the next activity instead, in the same order.
+    /// A download takes it in any state, as before; music and agents only
+    /// while the timer runs, since a paused or finished timer needs its mark:
+    /// above a minute its clock alone reads the same as a running one.
+    /// Every other strip fills both wings with its own content.
+    static func compactCompanion(timer: Bool, running: Bool, downloads: Bool, agents: Bool,
+                                 music: Bool) -> NotchCompactActivity? {
+        guard timer else { return nil }
+        if downloads { return .downloads }
+        guard running else { return nil }
+        return compactActivity(timer: false, downloads: false, agents: agents, music: music)
     }
 
     static func gestureIsOverHeader(expanded: Bool, peeking: Bool, fromTop: CGFloat, safeTop: CGFloat,
@@ -726,6 +767,12 @@ enum NotchSupport {
         defaults.object(forKey: DefaultsKey.notchCoversMenus) as? Bool ?? true
     }
 
+    /// The closed island stays out of sight until the pointer reaches it, and
+    /// shows no notices while it waits.
+    static func hidesUntilHover(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: DefaultsKey.notchHideUntilHover) && defaults.bool(forKey: DefaultsKey.notchOpenOnHover)
+    }
+
     static func idleContent(in defaults: UserDefaults = .standard) -> NotchIdleContent {
         let choice = NotchIdleContent(rawValue: defaults.string(forKey: DefaultsKey.notchIdleContent) ?? "") ?? .none
         if choice == .battery, !AppFeature.monitorPower.isAvailable(in: defaults) { return .none }
@@ -767,6 +814,15 @@ enum NotchSupport {
         peeking || (expanded && openedByHover)
     }
 
+    /// Another app becoming active closes the open island like a click away.
+    /// One opened by hover stays while the pointer rests on it unclicked:
+    /// reaching the island can itself make the app beneath it active, such as
+    /// a full-screen app on a display without focus, and leaving closes it
+    /// anyway. A click inside may be what brought the other app forward.
+    static func closesOnActivation(openedByHover: Bool, clicked: Bool, pointerInside: Bool) -> Bool {
+        !openedByHover || clicked || !pointerInside
+    }
+
     static func routes(_ event: NotchEvent, in defaults: UserDefaults = .standard) -> Bool {
         guard isEnabled(in: defaults), defaults.bool(forKey: event.preferenceKey) else { return false }
         switch event {
@@ -789,6 +845,7 @@ enum NotchSupport {
         case .capture:
             return AppFeature.screenshot.isAvailable(in: defaults)
                 && modules(in: defaults).contains(.captures)
+        case .track: return modules(in: defaults).contains(.music)
         }
     }
 
@@ -797,9 +854,14 @@ enum NotchSupport {
             && modules(in: defaults).contains(.clipboard)
     }
 
+    /// Whether the island is on and shows its Files module, whichever window
+    /// the user chose for the shelf.
+    static func showsFiles(in defaults: UserDefaults = .standard) -> Bool {
+        isEnabled(in: defaults) && modules(in: defaults).contains(.files)
+    }
+
     static func routesShelf(in defaults: UserDefaults = .standard) -> Bool {
-        isEnabled(in: defaults) && defaults.bool(forKey: DefaultsKey.notchShelf)
-            && modules(in: defaults).contains(.files)
+        showsFiles(in: defaults) && defaults.bool(forKey: DefaultsKey.notchShelf)
     }
 
     static func revealsShelfDrag(in defaults: UserDefaults = .standard) -> Bool {
@@ -861,7 +923,15 @@ struct NotchMenuBarMeasurements {
         let scale: CGFloat
         let height: CGFloat
     }
+    private static let range: ClosedRange<CGFloat> = 16...64
     private var readings: [UInt32: Reading] = [:]
+
+    /// A bar that hides until the pointer reveals it reserves nothing at the
+    /// top of the visible frame, and neither does a display without a bar.
+    static func showsBar(frame: CGRect, visibleTop: CGFloat) -> Bool {
+        let gap = frame.maxY - visibleTop
+        return gap.isFinite && range.contains(gap)
+    }
 
     mutating func retainDisplays(_ ids: [UInt32]) {
         readings = readings.filter { ids.contains($0.key) }
@@ -869,13 +939,13 @@ struct NotchMenuBarMeasurements {
 
     mutating func height(displayID: UInt32, frame: CGRect, visibleTop: CGFloat,
                          scale: CGFloat, statusBarThickness: CGFloat) -> CGFloat {
-        let range: ClosedRange<CGFloat> = 16...64
+        let range = Self.range
         let gap = frame.maxY - visibleTop
         let canRemember = displayID != 0 && scale.isFinite && scale > 0
         if let previous = readings[displayID], previous.size != frame.size || previous.scale != scale {
             readings[displayID] = nil
         }
-        if gap.isFinite, range.contains(gap) {
+        if Self.showsBar(frame: frame, visibleTop: visibleTop) {
             if canRemember { readings[displayID] = Reading(size: frame.size, scale: scale, height: gap) }
             return gap
         }
@@ -900,6 +970,8 @@ struct NotchGeometry: Equatable {
     var requiresFullWidthHeader = false
     private var allowsActivityFooter = true
     private var minimumCompactWidth: CGFloat = 0
+    /// Narrower wings than this are dropped rather than drawn cramped.
+    private var minimumWing: CGFloat = 44
 
     init(screen: CGRect, safeAreaTop: CGFloat, cameraWidth: CGFloat, layout: NotchSize = .compact,
          menuBarHeight: CGFloat = 24, compactSideRoom: CGFloat? = nil,
@@ -960,12 +1032,49 @@ struct NotchGeometry: Equatable {
     }
     /// Music remains one row high, with the physical camera between its wings.
     /// Insufficient menu space hides the wings instead of growing below the camera.
+    /// Beside a physical camera each wing is just wide enough for the cover or
+    /// the bars, kept as far from the strip's end as from its top and bottom.
     var compactMusicGeometry: NotchGeometry {
         var compact = self
-        let room = compactSideRoom ?? 0
-        compact.compactSideRoom = room.isFinite && room >= 44 ? min(isNotched ? 44 : 56, room) : 0
         compact.allowsActivityFooter = false
+        let room = compactSideRoom ?? 0
+        let wing = isNotched ? compact.compactMusicContentWing : 44
+        compact.compactSideRoom = room.isFinite && room >= wing ? min(isNotched ? wing : 56, room) : 0
+        compact.minimumWing = wing
         return compact
+    }
+    /// The cover takes the strip's height less an even gap above and below.
+    var compactMusicArtworkSide: CGFloat {
+        max(0, min(26, compactActivityContentHeight - NotchLayout.compactEdgeGap * 2))
+    }
+    /// A cover that fills the strip keeps the same gap from its end as from
+    /// its top and bottom, and its corners share a centre with the strip's
+    /// lower corners, so both curves run parallel. A cover well short of a
+    /// tall strip keeps the usual edge gap and a tile's own corners.
+    private var compactMusicArtworkFills: Bool {
+        compactActivityContentHeight - compactMusicArtworkSide <= NotchLayout.compactEdgeGap * 4
+    }
+    var compactMusicArtworkRadius: CGFloat {
+        let side = compactMusicArtworkSide
+        guard compactMusicArtworkFills else { return side * 0.28 }
+        let concentric = NotchLayout.surfaceRadius(height: compactActivitySize.height)
+            - (compactActivityContentHeight - side) / 2
+        return min(side / 2, max(side * 0.2, concentric))
+    }
+    var compactMusicArtworkInset: CGFloat {
+        let gap = compactMusicArtworkFills ? (compactActivityContentHeight - compactMusicArtworkSide) / 2
+            : NotchLayout.compactEdgeGap
+        return compactActivityEdgeInset(boxHeight: compactMusicArtworkSide, radius: compactMusicArtworkRadius, gap: gap)
+    }
+    var compactMusicBarHeight: CGFloat {
+        min(16, max(6, compactActivityContentHeight - NotchLayout.compactEdgeGap * 2))
+    }
+    var compactMusicBarsInset: CGFloat {
+        compactActivityEdgeInset(boxHeight: compactMusicBarHeight, radius: NotchLayout.compactMusicBarWidth / 2)
+    }
+    private var compactMusicContentWing: CGFloat {
+        max(compactMusicArtworkInset + compactMusicArtworkSide,
+            compactMusicBarsInset + NotchLayout.compactMusicBarsWidth).rounded(.up)
     }
     var musicCameraGap: CGFloat { cameraWidth }
     var compactMusicLabelInset: CGFloat {
@@ -988,6 +1097,31 @@ struct NotchGeometry: Equatable {
         compact.allowsActivityFooter = false
         return compact
     }
+    /// A download keeps its arrow and progress beside the camera. Where the
+    /// menus leave room, its name can take a wider wing without a fixed band.
+    func compactDownloadGeometry(wing: CGFloat = 56) -> NotchGeometry {
+        var compact = self
+        let room = compactSideRoom ?? 0
+        compact.compactSideRoom = room.isFinite && room >= 44 ? min(wing, room) : 0
+        compact.minimumCompactWidth = cameraWidth + wing * 2
+        return compact
+    }
+    static let calendarWingRange: ClosedRange<CGFloat> = 72...120
+    /// Give the title useful space beside the camera, as wide as the title or
+    /// the clock needs, so neither wing ends in a band of empty black. When
+    /// menus leave less than a readable wing, a physical notch uses one row
+    /// below the camera.
+    var compactCalendarGeometry: NotchGeometry { compactCalendarGeometry(wing: Self.calendarWingRange.upperBound) }
+    func compactCalendarGeometry(wing: CGFloat) -> NotchGeometry {
+        var compact = self
+        let room = compactSideRoom ?? 0
+        let range = Self.calendarWingRange
+        let fitted = min(range.upperBound, max(range.lowerBound, wing.isFinite ? wing.rounded(.up) : 0))
+        compact.compactSideRoom = room.isFinite && room >= range.lowerBound ? min(fitted, room) : 0
+        compact.minimumCompactWidth = cameraWidth + fitted * 2
+        compact.minimumWing = 72
+        return compact
+    }
     /// A working agent keeps its mark and one reading beside the camera,
     /// never below it, like the timer. Both wings take the width the reading
     /// needs, so a short one leaves no band of empty black at the ends.
@@ -1006,7 +1140,7 @@ struct NotchGeometry: Equatable {
         let measuredRoom = compactSideRoom ?? 0
         let room = measuredRoom.isFinite ? max(0, measuredRoom).rounded(.down) : 0
         let wings = min(max(0, preferred - cameraWidth), room * 2)
-        return CGSize(width: cameraWidth + (wings >= 88 ? wings : 0), height: stripHeight)
+        return CGSize(width: cameraWidth + (wings >= minimumWing * 2 ? wings : 0), height: stripHeight)
     }
     var musicWingWidth: CGFloat { max(0, (musicStrip.width - musicCameraGap) / 2) }
 
@@ -1224,14 +1358,173 @@ struct NotchSessionState {
 
 /// Reserve enough backing space for both ends. The visible silhouette moves
 /// inside it; the native window only shrinks after the transition finishes.
+///
+/// Each side follows its own spring, as the phone's island does. Growing, the
+/// island drops a little ahead of widening and passes its size before it
+/// settles; shrinking, it pulls up ahead of narrowing and never passes its
+/// target, which for a resting island is the camera it hugs.
 enum NotchMotion {
+    /// Departing content has faded out by 0.16 s; the view then swaps it for
+    /// the next content, which fades in once the swap is on screen.
+    static let departureHidden: TimeInterval = 0.2
+
+    struct Spring: Equatable {
+        /// Perceptual duration and bounce, as SwiftUI and Core Animation define them.
+        var duration: TimeInterval
+        var bounce: Double
+
+        /// Progress from rest at 0 toward 1.
+        func progress(at time: TimeInterval) -> Double {
+            guard time > 0 else { return 0 }
+            let natural = 2 * Double.pi / duration
+            let damping = 1 - bounce
+            if damping >= 1 { return 1 - exp(-natural * time) * (1 + natural * time) }
+            let damped = natural * (1 - damping * damping).squareRoot()
+            return 1 - exp(-damping * natural * time)
+                * (cos(damped * time) + damping * natural / damped * sin(damped * time))
+        }
+
+        /// How far past the target the spring swings, as a share of its travel.
+        var overshoot: Double {
+            guard bounce > 0 else { return 0 }
+            let damping = 1 - bounce
+            return exp(-Double.pi * damping / (1 - damping * damping).squareRoot())
+        }
+
+        /// This spring, with only as much bounce as keeps the swing within `limit` points.
+        func limited(travel: CGFloat, limit: CGFloat) -> Spring {
+            guard bounce > 0, travel > 0, Double(travel) * overshoot > Double(limit) else { return self }
+            let share = log(Double(max(limit, 0.01) / travel))
+            return Spring(duration: duration, bounce: 1 + share / (Double.pi * Double.pi + share * share).squareRoot())
+        }
+    }
+
+    static let growingWidth = Spring(duration: 0.44, bounce: 0.25)
+    static let growingHeight = Spring(duration: 0.38, bounce: 0.22)
+    static let shrinkingWidth = Spring(duration: 0.30, bounce: 0)
+    static let shrinkingHeight = Spring(duration: 0.26, bounce: 0)
+    /// The farthest a side may pass its target. The display always keeps at
+    /// least this much free around the island and its floating controls.
+    static let overshootLimit: CGFloat = 12
+    /// Sides closer than this to their targets read as settled.
+    static let settledDistance: CGFloat = 0.5
+
+    static func spring(from: CGFloat, to: CGFloat, width: Bool) -> Spring {
+        let spring = to > from ? (width ? growingWidth : growingHeight) : (width ? shrinkingWidth : shrinkingHeight)
+        return spring.limited(travel: abs(to - from), limit: overshootLimit)
+    }
+
+    /// The spring carrying the island's sides, for controls that ride along them.
+    static func sideSpring(from: CGSize, to: CGSize) -> Spring {
+        from.width != to.width ? spring(from: from.width, to: to.width, width: true)
+            : spring(from: from.height, to: to.height, width: false)
+    }
+
+    /// The perceptual duration of the slower side that moves.
     static func duration(from: CGSize, to: CGSize) -> TimeInterval {
-        let grows = to.height > from.height || (to.height == from.height && to.width > from.width)
-        return grows ? 0.34 : 0.26
+        var durations: [TimeInterval] = []
+        if from.width != to.width { durations.append(spring(from: from.width, to: to.width, width: true).duration) }
+        if from.height != to.height { durations.append(spring(from: from.height, to: to.height, width: false).duration) }
+        return durations.max() ?? growingWidth.duration
+    }
+
+    static func size(at time: TimeInterval, from: CGSize, to: CGSize) -> CGSize {
+        func side(_ start: CGFloat, _ end: CGFloat, width: Bool) -> CGFloat {
+            guard start != end else { return end }
+            return max(0, start + (end - start) * CGFloat(spring(from: start, to: end, width: width).progress(at: time)))
+        }
+        return CGSize(width: side(from.width, to.width, width: true), height: side(from.height, to.height, width: false))
+    }
+
+    /// When every side that moves first comes within 1% of its travel from
+    /// its target: the island has arrived, though it may still swing.
+    static func arrivalTime(from: CGSize, to: CGSize) -> TimeInterval {
+        let sides = [(from.width, to.width, true), (from.height, to.height, false)].filter { $0.0 != $0.1 }
+        let step = 1.0 / 240
+        var time = step
+        while time < 2, !sides.allSatisfy({ spring(from: $0.0, to: $0.1, width: $0.2).progress(at: time) >= 0.99 }) {
+            time += step
+        }
+        return sides.isEmpty ? 0 : time
+    }
+
+    /// When both sides stay within `settledDistance` of their targets for good.
+    static func settlingTime(from: CGSize, to: CGSize) -> TimeInterval {
+        let step = 1.0 / 240
+        var settled = step
+        var time = step
+        while time < 2 {
+            let size = size(at: time, from: from, to: to)
+            if abs(size.width - to.width) > settledDistance || abs(size.height - to.height) > settledDistance {
+                settled = time + step
+            }
+            time += step
+        }
+        return settled
+    }
+
+    /// Sizes at a steady rate, ending exactly at `to`, and where each falls
+    /// within the duration.
+    static func frames(from: CGSize, to: CGSize) -> (sizes: [CGSize], keyTimes: [Double], duration: TimeInterval) {
+        let duration = settlingTime(from: from, to: to)
+        let count = max(1, Int((duration * 120).rounded(.up)))
+        let keyTimes = (0...count).map { Double($0) / Double(count) }
+        let sizes = keyTimes.map { $0 == 1 ? to : size(at: duration * $0, from: from, to: to) }
+        return (sizes, keyTimes, duration)
+    }
+
+    /// Whole, equal margins around `size`, so the island keeps its exact
+    /// pixels when the window returns to that size; half a point would round
+    /// to a one-pixel jump on a standard-resolution display.
+    static func reservation(_ reserved: CGSize, centring size: CGSize) -> CGSize {
+        CGSize(width: size.width + 2 * max(0, (reserved.width - size.width) / 2).rounded(.up),
+               height: max(reserved.height, size.height))
     }
 
     static func envelope(from: CGSize, to: CGSize) -> CGSize {
-        CGSize(width: max(from.width, to.width), height: max(from.height, to.height))
+        func side(_ start: CGFloat, _ end: CGFloat, width: Bool) -> CGFloat {
+            let swing = end > start ? spring(from: start, to: end, width: width).overshoot : 0
+            guard swing > 0 else { return max(start, end) }
+            return (end + (end - start) * CGFloat(swing)).rounded(.up)
+        }
+        return CGSize(width: side(from.width, to.width, width: true), height: side(from.height, to.height, width: false))
+    }
+}
+
+/// How open the glass lip is at each height of a resize. The page leaves the
+/// island as soon as it starts closing, so glass closing into a black strip
+/// shuts at once: open, the empty glass showed the windows beneath it through
+/// the whole collapse. Glass leaving a black strip stays shut until the last
+/// stretch, where the page fades in over it. An opening that interrupts a
+/// close starts from the openness already on screen.
+struct NotchGlassFade: Equatable {
+    /// Where the lip is shut, and the height over which it opens from there.
+    var solidHeight: CGFloat = 0
+    var range: CGFloat = 1
+
+    static let open = NotchGlassFade()
+    static let stretch: CGFloat = 48
+
+    func openness(atHeight height: CGFloat) -> CGFloat {
+        guard height.isFinite, range > 0 else { return 1 }
+        return min(1, max(0, (height - solidHeight) / range))
+    }
+
+    /// `current` is the openness on screen at `start`: zero while black.
+    static func plan(from start: CGFloat, to end: CGFloat, endsInGlass: Bool, current: CGFloat) -> NotchGlassFade {
+        guard start.isFinite, end.isFinite else { return .open }
+        let current = min(1, max(0, current.isFinite ? current : 1))
+        let travel = abs(end - start)
+        if endsInGlass {
+            guard end > start, current < 1 else { return .open }
+            if current == 0 {
+                let range = min(stretch, travel)
+                return NotchGlassFade(solidHeight: end - range, range: max(1, range))
+            }
+            let range = travel / (1 - current)
+            return NotchGlassFade(solidHeight: start - current * range, range: max(1, range))
+        }
+        return NotchGlassFade(solidHeight: max(start, end), range: 1)
     }
 }
 

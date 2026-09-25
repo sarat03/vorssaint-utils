@@ -57,6 +57,11 @@ enum NotchScreenRefreshContract {
         var resignations = 0
         func resignKey() { resignations += 1 }
     }
+    enum NSEvent { static var mouseLocation = CGPoint.zero }
+    final class Host {
+        var rect = CGRect.zero
+        func containsHover(_ point: CGPoint) -> Bool { rect.contains(point) }
+    }
     class State {
         var hiddenInFullscreen = false
         func fullscreenEnvironmentDidChange() {}
@@ -69,15 +74,19 @@ enum NotchScreenRefreshContract {
         var compactActivity: Bool?
         var accessibilityGranted = true
         var coversMenus = false
+        var menuBarHidden = false
         var menuSpaceTimer: Timer?
         var menuSpaceGeneration = 0
         var screenRefreshWork: DispatchWorkItem?
         var geometry = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
                                      safeAreaTop: 32, cameraWidth: 210, compactSideRoom: 64)
         var panel: Panel? = Panel()
+        var windowHost: Host? = Host()
         var modules: [NotchModule] = [.controls]
         var pinned = false
         var keepsWorkingSurface = false
+        var openedByHover = false
+        var clickedSinceOpening = false
         var preferenceSyncs = 0
         var reads = 0
         var appliedRooms: [CGFloat?] = []
@@ -234,6 +243,31 @@ enum NotchScreenRefreshContract {
         suite.expect(simulated.reads == beforeReads + 3, "a suspended island ignores activations")
         simulated.suspended = false
 
+        let hovered = Service()
+        hovered.expanded = true
+        hovered.openedByHover = true
+        hovered.windowHost?.rect = hovered.geometry.frame(for: hovered.geometry.expanded)
+        let onIsland = CGPoint(x: hovered.geometry.screen.midX, y: hovered.geometry.screen.maxY - 1)
+        NSEvent.mouseLocation = onIsland
+        NSWorkspace.shared.frontmostApplication = RunningApplication(bundleIdentifier: "com.example.editor")
+        hovered.applicationDidActivate()
+        suite.expect(hovered.collapses == 0 && hovered.panel?.resignations == 1,
+               "an island hover opened stays under the pointer when reaching it makes the app beneath active, "
+               + "such as a full-screen app on a display without focus")
+        hovered.clickedSinceOpening = true
+        hovered.applicationDidActivate()
+        suite.expect(hovered.collapses == 1,
+               "after a click inside, which may be what opened the other app, the island still closes as it comes forward")
+        hovered.clickedSinceOpening = false
+        NSEvent.mouseLocation = CGPoint(x: hovered.geometry.screen.minX, y: hovered.geometry.screen.minY)
+        hovered.applicationDidActivate()
+        suite.expect(hovered.collapses == 2, "an island hover opened closes when another app activates away from the pointer")
+        hovered.openedByHover = false
+        NSEvent.mouseLocation = onIsland
+        hovered.applicationDidActivate()
+        suite.expect(hovered.collapses == 3,
+               "an island opened by a click or shortcut still closes when another app activates under the pointer")
+
         let covering = Service()
         covering.geometry.compactSideRoom = nil
         covering.accessibilityGranted = false
@@ -272,6 +306,25 @@ enum NotchScreenRefreshContract {
         idleSimulated.syncMenuSpaceMonitoring()
         suite.expect(idleSimulated.geometry.compactSideRoom.map { $0 > 0 } == true,
                "compact activity on a simulated cutout covers the menus")
+
+        let hiddenBar = Service()
+        hiddenBar.geometry = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                                           safeAreaTop: 0, cameraWidth: 0)
+        hiddenBar.idleContent = .none
+        hiddenBar.coversMenus = true
+        hiddenBar.menuBarHidden = true
+        hiddenBar.syncMenuSpaceMonitoring()
+        let hiddenEmptyBar = NotchMenuBarLayout.sideRoom(screen: hiddenBar.geometry.screen,
+                                                         cameraWidth: hiddenBar.geometry.cameraWidth,
+                                                         barHeight: hiddenBar.geometry.menuBarHeight, occupied: [])
+        suite.expect(hiddenBar.menuSpaceTimer == nil && hiddenBar.reads == 0
+               && hiddenBar.geometry.compactSideRoom == hiddenEmptyBar && (hiddenEmptyBar ?? 0) > 0,
+               "a simulated cutout under a hidden menu bar has no menus to give way to, "
+               + "so an app whose menus report no frame cannot take it away")
+        hiddenBar.coversMenus = false
+        hiddenBar.syncMenuSpaceMonitoring()
+        suite.expect(hiddenBar.menuSpaceTimer != nil && hiddenBar.reads == 1,
+               "choosing to leave the menus uncovered still gives way to a hidden bar's menus")
 
         let physical = Service()
         physical.idleContent = .none
