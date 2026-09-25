@@ -510,14 +510,16 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         // Both hosts keep the editor at zero opacity while previewing. Finding
         // there would open a bar or select a match nobody can see, over a
         // source nobody is reading, so the pad comes back to the text first.
+        let leftPreview = isPreviewing
         if isPreviewing {
             isPreviewing = false
         }
         let sender = NSMenuItem()
         sender.tag = action.rawValue
         // Stepping through matches leaves the keyboard where it is, so
-        // Command-G from the search field keeps typing in the field.
-        if action == .showFindInterface {
+        // Command-G from the search field keeps typing in the field. Preview
+        // took the keyboard from the text, so a step out of it gives it back.
+        if action == .showFindInterface || leftPreview {
             textView.window?.makeFirstResponder(textView)
         }
         textView.performTextFinderAction(sender)

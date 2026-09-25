@@ -84,10 +84,12 @@ struct NotchScratchpadView: View {
                 }
             } else {
                 DispatchQueue.main.async {
-                    // Preview closed the bar, so one up now was opened by
-                    // Command-F on its way out of preview, and its search
-                    // field keeps the keyboard instead of the caret.
-                    guard view.enclosingScrollView?.isFindBarVisible != true else { return }
+                    // Preview closed the bar and took the keyboard, so a bar
+                    // up now was opened by Command-F and a focused text was
+                    // given the keyboard by Command-G, both on their way out
+                    // of preview. Either keeps its focus and the match.
+                    guard view.enclosingScrollView?.isFindBarVisible != true,
+                          view.window?.firstResponder !== view else { return }
                     focusEditor()
                 }
             }
