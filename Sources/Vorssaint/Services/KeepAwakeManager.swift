@@ -21,6 +21,8 @@ final class KeepAwakeManager: ObservableObject {
     @Published private(set) var isActive = false
     @Published private(set) var endDate: Date? // nil = indefinite
     @Published private(set) var sessionTrigger: SessionTrigger?
+    /// The preset a manual session started from; nil for an end time or automation.
+    @Published private(set) var sessionMinutes: Int?
     @Published private(set) var runningAppBundleIDs: [String] = []
     @Published private(set) var activeAutomationConditions = Set<KeepAwakeAutomationCondition>()
     @Published private(set) var clamshellActive = false {
@@ -152,6 +154,7 @@ final class KeepAwakeManager: ObservableObject {
         // An installation prompt may already be open. Its existing reply can
         // finish setup without showing a second authorization request.
         clamshellEnablePending = false
+        sessionMinutes = nil
         lidSleepGeneration &+= 1
         lidSleepAttemptsRemaining = 0
         clamshellActive = false
@@ -229,6 +232,7 @@ final class KeepAwakeManager: ObservableObject {
         let minutes = Defaults.sanitizedDefaultDuration(minutes)
         let end = minutes > 0 ? Date().addingTimeInterval(TimeInterval(minutes) * 60) : nil
         activate(end: end, trigger: .manual)
+        sessionMinutes = isActive ? minutes : nil
     }
 
     func activate(until date: Date) {
@@ -293,6 +297,7 @@ final class KeepAwakeManager: ObservableObject {
         endDate = nil
         releaseAssertions()
         sessionTrigger = nil
+        sessionMinutes = nil
         activeAutomationConditions.removeAll()
         isActive = false
         sessionPausedForScreenLock = false
@@ -1104,12 +1109,19 @@ final class KeepAwakeManager: ObservableObject {
     }
 
     private func checkBattery() {
-        let limit = Defaults.sanitizedBatteryLimit(UserDefaults.standard.integer(forKey: DefaultsKey.batteryLimit))
-        guard limit > 0, isActive else { return }
-        guard let battery = SystemInfo.batterySnapshot(),
-              battery.isOnBattery,
-              battery.percent <= limit else { return }
+        guard isActive, batteryProtectionPercent() != nil else { return }
         deactivate(reason: .battery)
+    }
+
+    /// The battery level while battery protection would end any session at
+    /// once (on battery, at or below the limit); nil when a session can run.
+    func batteryProtectionPercent() -> Int? {
+        let limit = Defaults.sanitizedBatteryLimit(UserDefaults.standard.integer(forKey: DefaultsKey.batteryLimit))
+        guard limit > 0,
+              let battery = SystemInfo.batterySnapshot(),
+              battery.isOnBattery,
+              battery.percent <= limit else { return nil }
+        return battery.percent
     }
 
     // MARK: - Optional pointer activity
