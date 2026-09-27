@@ -975,6 +975,19 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
     static let defaultHidden = "microphone,screenshot,recording,speedTest,panel,commandBar,scratchpad"
     var id: String { rawValue }
 
+    /// The section a shortcut tile only jumps to, so a section already pinned
+    /// around the island does not show up again as a tile. The music card,
+    /// volume and brightness render their own view here, so they always stay.
+    var module: NotchModule? {
+        switch self {
+        case .mixer: return .mixer
+        case .timer: return .timer
+        case .calendar: return .calendar
+        case .scratchpad: return .scratchpad
+        default: return nil
+        }
+    }
+
     var symbol: String {
         switch self {
         case .volume: return "speaker.wave.2.fill"
@@ -1479,14 +1492,53 @@ enum NotchSupport {
         return choice == .music && !showsMusicActivity(isPlaying: isPlaying, in: defaults) ? .none : choice
     }
 
+    /// What the buttons around the island already reach, so Controls leaves
+    /// it out. A section button and its control button count as the same.
+    struct Pinned: Equatable {
+        var modules: Set<NotchModule> = []
+        var controls: Set<NotchControlItem> = []
+
+        func contains(_ item: NotchControlItem) -> Bool {
+            controls.contains(item) || item.module.map(modules.contains) ?? false
+        }
+    }
+
+    // ponytail: keyed on the saved layout bytes, so the JSON decodes once per
+    // edit instead of on every tile and island resize.
+    private static var pinnedCache: (layout: Data, pinned: Pinned)?
+
+    static func pinned(in defaults: UserDefaults = .standard) -> Pinned {
+        guard defaults.object(forKey: DefaultsKey.notchHidePinned) as? Bool ?? true else { return Pinned() }
+        let layout = defaults.data(forKey: DefaultsKey.notchQuickAccessLayout)
+        if let layout, let cache = pinnedCache, cache.layout == layout { return cache.pinned }
+        var pinned = Pinned()
+        for action in NotchQuickAccessConfiguration.stored(in: defaults).actions {
+            switch action {
+            case .module(let module): pinned.modules.insert(module)
+            case .control(let item):
+                pinned.controls.insert(item)
+                if let module = item.module { pinned.modules.insert(module) }
+            default: break
+            }
+        }
+        if let layout { pinnedCache = (layout, pinned) }
+        return pinned
+    }
+
+    static func isPinned(_ item: NotchControlItem, in defaults: UserDefaults = .standard) -> Bool {
+        pinned(in: defaults).contains(item)
+    }
+
     static func controls(in defaults: UserDefaults = .standard) -> [NotchControlItem] {
         let hidden = Set((defaults.string(forKey: DefaultsKey.notchHiddenControls) ?? NotchControlItem.defaultHidden)
             .split(separator: ",").map(String.init))
         let stored = (defaults.string(forKey: DefaultsKey.notchControlOrder) ?? "")
             .split(separator: ",").compactMap { NotchControlItem(rawValue: String($0)) }
+        let pinned = pinned(in: defaults)
         var seen = Set<NotchControlItem>()
-        return (stored + NotchControlItem.allCases).filter {
-            seen.insert($0).inserted && !hidden.contains($0.rawValue) && $0.isAvailable(in: defaults)
+        return (stored + NotchControlItem.allCases).filter { item in
+            seen.insert(item).inserted && !hidden.contains(item.rawValue) && item.isAvailable(in: defaults)
+                && !pinned.contains(item)
         }
     }
 
