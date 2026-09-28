@@ -487,6 +487,11 @@ extension ScratchpadSupport {
         // back off. The first click leaves the address selected, not the whole
         // link, so the link has to be recognised from anywhere inside it.
         if let existing = enclosingLink(in: ns, selection: selection) {
+            if existing.isImage {
+                return ScratchpadMarkEdit(range: selection,
+                                          replacement: ns.substring(with: selection),
+                                          selection: selection)
+            }
             let label = ns.substring(with: existing.label)
             return ScratchpadMarkEdit(
                 range: existing.whole,
@@ -503,28 +508,54 @@ extension ScratchpadSupport {
                                length: (linkPlaceholder as NSString).length))
     }
 
-    private static let linkPattern = try? NSRegularExpression(pattern: "\\[([^\\]]*)\\]\\(([^)]*)\\)")
-
     /// The link the selection sits in, with the range of its words. A caret has
     /// to be strictly inside one: resting it against either edge is where
     /// someone is about to write a new link, not undo the one behind them.
     private static func enclosingLink(in ns: NSString,
-                                      selection: NSRange) -> (whole: NSRange, label: NSRange)? {
-        guard let linkPattern else { return nil }
-        let matches = linkPattern.matches(in: ns as String,
-                                          range: NSRange(location: 0, length: ns.length))
-        for match in matches {
-            let whole = match.range
-            let end = whole.location + whole.length
+                                      selection: NSRange) -> (whole: NSRange, label: NSRange, isImage: Bool)? {
+        var start = 0
+        while start < ns.length {
+            defer { start += 1 }
+            guard ns.character(at: start) == 91, !isEscaped(start, in: ns) else { continue }
+            var labelEnd = start + 1
+            var brackets = 1
+            while labelEnd < ns.length, brackets > 0 {
+                if !isEscaped(labelEnd, in: ns) {
+                    if ns.character(at: labelEnd) == 91 { brackets += 1 }
+                    if ns.character(at: labelEnd) == 93 { brackets -= 1 }
+                }
+                labelEnd += 1
+            }
+            guard brackets == 0, labelEnd < ns.length,
+                  ns.character(at: labelEnd) == 40 else { continue }
+            var end = labelEnd + 1
+            var parentheses = 1
+            while end < ns.length, parentheses > 0 {
+                if !isEscaped(end, in: ns) {
+                    if ns.character(at: end) == 40 { parentheses += 1 }
+                    if ns.character(at: end) == 41 { parentheses -= 1 }
+                }
+                end += 1
+            }
+            guard parentheses == 0 else { continue }
+            let whole = NSRange(location: start, length: end - start)
             if selection.length == 0 {
                 guard selection.location > whole.location, selection.location < end else { continue }
             } else {
                 guard selection.location >= whole.location,
                       selection.location + selection.length <= end else { continue }
             }
-            return (whole, match.range(at: 1))
+            let isImage = start > 0 && ns.character(at: start - 1) == 33
+                && !isEscaped(start - 1, in: ns)
+            return (whole, NSRange(location: start + 1, length: labelEnd - start - 2), isImage)
         }
         return nil
+    }
+
+    private static func isEscaped(_ index: Int, in ns: NSString) -> Bool {
+        var cursor = index
+        while cursor > 0, ns.character(at: cursor - 1) == 92 { cursor -= 1 }
+        return (index - cursor) % 2 == 1
     }
 
     private static func inlineEdit(wrap: String,
@@ -538,11 +569,8 @@ extension ScratchpadSupport {
         if selected.count >= wrap.count * 2,
            selected.hasPrefix(wrap), selected.hasSuffix(wrap) {
             let inner = String(selected.dropFirst(wrap.count).dropLast(wrap.count))
-            return ScratchpadMarkEdit(
-                range: selection,
-                replacement: inner,
-                selection: NSRange(location: selection.location,
-                                   length: (inner as NSString).length))
+            return existingInlineEdit(wrap: wrap, inner: inner,
+                                      whole: selection, selection: selection)
         }
 
         // Or just outside it, which is where the second click lands: applying
@@ -553,11 +581,11 @@ extension ScratchpadSupport {
            after.location + after.length <= ns.length,
            ns.substring(with: before) == wrap,
            ns.substring(with: after) == wrap {
-            return ScratchpadMarkEdit(
-                range: NSRange(location: before.location,
+            return existingInlineEdit(
+                wrap: wrap, inner: selected,
+                whole: NSRange(location: before.location,
                                length: markerLength * 2 + selection.length),
-                replacement: selected,
-                selection: NSRange(location: before.location, length: selection.length))
+                selection: selection)
         }
 
         // With no selection the pair still goes in, with the caret between the
@@ -567,6 +595,32 @@ extension ScratchpadSupport {
             replacement: wrap + selected + wrap,
             selection: NSRange(location: selection.location + markerLength,
                                length: selection.length))
+    }
+
+    /// Adjacent marked spans are not one wrapper. Joining their content under
+    /// one pair gives the whole selection the mark; the next click removes it.
+    /// Leave ambiguous or escaped delimiters alone rather than break the text.
+    private static func existingInlineEdit(wrap: String, inner: String,
+                                           whole: NSRange, selection: NSRange) -> ScratchpadMarkEdit {
+        let pieces = inner.components(separatedBy: wrap)
+        if pieces.count == 1 {
+            return ScratchpadMarkEdit(
+                range: whole, replacement: inner,
+                selection: NSRange(location: whole.location, length: (inner as NSString).length))
+        }
+        let original = wrap + inner + wrap
+        let hasOtherMarkup = wrap == "`"
+            ? inner.hasPrefix("`") || inner.hasSuffix("`")
+            : inner.contains("`") || inner.contains("](")
+        guard (pieces.count - 1).isMultiple(of: 2),
+              !inner.contains("\\" + wrap), !hasOtherMarkup else {
+            return ScratchpadMarkEdit(range: whole, replacement: original, selection: selection)
+        }
+        let joined = pieces.joined()
+        return ScratchpadMarkEdit(
+            range: whole, replacement: wrap + joined + wrap,
+            selection: NSRange(location: whole.location + (wrap as NSString).length,
+                               length: (joined as NSString).length))
     }
 
     /// Italic's marker is a single star, which is also half of bold's pair, so
@@ -584,6 +638,13 @@ extension ScratchpadSupport {
         // marked span looks like. Only the innermost pair is italic's.
         if leading % 2 == 1, trailing % 2 == 1, selected.count > leading + trailing - 1 {
             let inner = String(selected.dropFirst().dropLast())
+            if leading == 1, trailing == 1, inner.contains("*"), !inner.contains("**") {
+                return existingInlineEdit(wrap: "*", inner: inner,
+                                          whole: selection, selection: selection)
+            }
+            if inner.contains("***") {
+                return ScratchpadMarkEdit(range: selection, replacement: selected, selection: selection)
+            }
             return ScratchpadMarkEdit(
                 range: selection,
                 replacement: inner,
@@ -596,6 +657,17 @@ extension ScratchpadSupport {
         if starRun(in: ns, endingAt: selection.location) % 2 == 1,
            starRun(in: ns, startingAt: selection.location + selection.length) % 2 == 1 {
             let outer = NSRange(location: selection.location - 1, length: selection.length + 2)
+            if starRun(in: ns, endingAt: selection.location) == 1,
+               starRun(in: ns, startingAt: selection.location + selection.length) == 1,
+               selected.contains("*"), !selected.contains("**") {
+                return existingInlineEdit(wrap: "*", inner: selected,
+                                          whole: outer, selection: selection)
+            }
+            if selected.contains("***") {
+                return ScratchpadMarkEdit(range: outer,
+                                          replacement: ns.substring(with: outer),
+                                          selection: selection)
+            }
             return ScratchpadMarkEdit(
                 range: outer,
                 replacement: selected,

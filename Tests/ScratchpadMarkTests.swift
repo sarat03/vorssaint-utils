@@ -67,6 +67,45 @@ enum ScratchpadMarkTests {
         let unwrapped = applying(.bold, to: "**note**", NSRange(location: 2, length: 4))
         expect(unwrapped.text == "note", "a second click takes bold off, got \(unwrapped.text)")
 
+        let twoBoldSpans = "**one** and **two**"
+        for selection in [NSRange(location: 0, length: 19), NSRange(location: 2, length: 15)] {
+            let joined = applying(.bold, to: twoBoldSpans, selection)
+            expect(joined.text == "**one and two**"
+                    && joined.selection == NSRange(location: 2, length: 11),
+                   "a mixed selection joins bold spans without breaking delimiters, got \(joined.text)")
+            let removed = applying(.bold, to: joined.text, joined.selection)
+            expect(removed.text == "one and two",
+                   "the joined span still toggles off, got \(removed.text)")
+        }
+        expect(applying(.strikethrough, to: "~~one~~ and ~~two~~",
+                        NSRange(location: 0, length: 19)).text == "~~one and two~~",
+               "separate strikethrough spans join without broken delimiters")
+        expect(applying(.code, to: "`one` and `two`",
+                        NSRange(location: 0, length: 15)).text == "`one and two`",
+               "separate code spans join without broken delimiters")
+        for selection in [NSRange(location: 0, length: 15), NSRange(location: 1, length: 13)] {
+            let joined = applying(.italic, to: "*one* and *two*", selection)
+            expect(joined.text == "*one and two*",
+                   "separate italic spans join without broken delimiters, got \(joined.text)")
+        }
+        let nestedItalicSpans = "***one*** and ***two***"
+        expect(applying(.italic, to: nestedItalicSpans,
+                        NSRange(location: 0, length: (nestedItalicSpans as NSString).length)).text
+                    == nestedItalicSpans,
+               "grouped nested italic spans stay intact when their boundary is ambiguous")
+        let escapedBold = "**a \\** b**"
+        expect(applying(.bold, to: escapedBold,
+                        NSRange(location: 0, length: (escapedBold as NSString).length)).text == escapedBold,
+               "an escaped delimiter inside bold is left intact")
+        let boldWithCode = "**one `**` and `**` two**"
+        expect(applying(.bold, to: boldWithCode,
+                        NSRange(location: 0, length: (boldWithCode as NSString).length)).text == boldWithCode,
+               "literal markers inside code are not removed from bold text")
+        let longCode = "``a`b``"
+        expect(applying(.code, to: longCode,
+                        NSRange(location: 0, length: (longCode as NSString).length)).text == longCode,
+               "a multi-backtick code span is not mistaken for separate spans")
+
         let spanned = applying(.strikethrough, to: "~~gone~~", NSRange(location: 0, length: 8))
         expect(spanned.text == "gone", "markers inside the selection come off, got \(spanned.text)")
 
@@ -163,6 +202,16 @@ enum ScratchpadMarkTests {
         expect(fromLabel.text == "see docs now", "or from the words, got \(fromLabel.text)")
         let fromWhole = applying(.link, to: "[docs](url)", NSRange(location: 0, length: 11))
         expect(fromWhole.text == "docs", "or from the whole link, got \(fromWhole.text)")
+
+        let nestedAddress = "[docs](https://example.test/a_(b_(c)))"
+        expect(applying(.link, to: nestedAddress, NSRange(location: 1, length: 4)).text == "docs",
+               "balanced parentheses in a link address come off with the link")
+        let escapedAddress = "[docs](https://example.test/a\\)b)"
+        expect(applying(.link, to: escapedAddress, NSRange(location: 1, length: 4)).text == "docs",
+               "an escaped closing parenthesis does not end the link early")
+        let image = "![alt](url)"
+        expect(applying(.link, to: image, NSRange(location: 2, length: 3)).text == image,
+               "link toggle inside an image does not remove its address")
 
         // A caret resting against a link's edge is about to write a new one.
         let beside = applying(.link, to: "[docs](url)", NSRange(location: 11, length: 0))

@@ -318,6 +318,7 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         let edit = ScratchpadSupport.edit(applying: mark,
                                           to: textView.string,
                                           selection: textView.selectedRange())
+        guard (textView.string as NSString).substring(with: edit.range) != edit.replacement else { return }
         guard textView.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
         textView.replaceCharacters(in: edit.range, with: edit.replacement)
         textView.didChangeText()
