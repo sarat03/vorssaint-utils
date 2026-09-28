@@ -2545,14 +2545,15 @@ struct KeepAwakeCard: View {
         PanelSection(.keepAwake, title: l10n.s.keepAwakeTitle, collapsible: collapsible) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    // Beside the extend chips a narrow panel has no room for the
-                    // status; the highlighted chip already shows the countdown.
-                    ViewThatFits(in: .horizontal) {
-                        statusLine.fixedSize()
-                        Color.clear.frame(width: 0, height: 0)
-                    }
-                    Spacer(minLength: 4)
                     if awake.isActive, awake.endDate != nil {
+                        // Beside the extend chips a narrow panel has no room for the
+                        // status; the highlighted chip already shows the countdown
+                        // or the end time.
+                        ViewThatFits(in: .horizontal) {
+                            statusLine.fixedSize()
+                            Color.clear.frame(width: 0, height: 0)
+                        }
+                        Spacer(minLength: 4)
                         HStack(spacing: 4) {
                             ForEach([15, 30, 60], id: \.self) { minutes in
                                 Button("+" + DurationPicker.shortTitle(for: minutes, l10n.s, l10n.language)) {
@@ -2562,6 +2563,11 @@ struct KeepAwakeCard: View {
                                 .fixedSize()
                             }
                         }
+                    } else {
+                        // Without the extend chips a long status, such as the
+                        // conditions of an automatic session, wraps instead.
+                        statusLine
+                        Spacer(minLength: 4)
                     }
                     Toggle(l10n.s.keepAwakeTitle, isOn: activeBinding)
                         .toggleStyle(.switch)
@@ -2858,7 +2864,8 @@ struct KeepAwakeCard: View {
 
     private var untilChip: some View {
         KeepAwakeEndTimePicker(selection: untilTime,
-                               activeEnd: manualSession && awake.sessionMinutes == nil ? awake.endDate : nil) {
+                               activeEnd: manualSession && awake.sessionMinutes == nil ? awake.endDate : nil,
+                               onStop: { awake.toggle() }) {
             awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime.wrappedValue, now: Date()))
             untilDraft = nil
         }

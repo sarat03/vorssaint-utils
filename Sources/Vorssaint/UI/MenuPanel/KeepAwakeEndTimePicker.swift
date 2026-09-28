@@ -6,23 +6,33 @@ import SwiftUI
 
 /// The "Until…" chip beside the duration chips. It opens hour and minute
 /// wheels (scroll, click a neighbour, or arrow keys) plus a field to type an
-/// exact time, and starts the session from the popover.
+/// exact time, and starts the session from the popover. While that session
+/// runs the chip shows its end time, and a click stops it like any chip.
 struct KeepAwakeEndTimePicker: View {
     @ObservedObject private var l10n = L10n.shared
     @Binding var selection: Date
     /// The end of a running "until" session, shown on the highlighted chip.
     var activeEnd: Date?
+    var onStop: () -> Void
     var onStart: () -> Void
     @State private var isPresented = false
 
+    /// A time with the widest hour, so the reserved width fits any end time.
+    private static let widestTime = Calendar.current.date(bySettingHour: 22, minute: 22, second: 0, of: Date()) ?? Date()
+
     var body: some View {
-        Button { isPresented.toggle() } label: {
+        Button {
+            if activeEnd != nil { onStop() } else { isPresented.toggle() }
+        } label: {
             HStack(spacing: 3) {
                 Image(systemName: "clock")
-                if let activeEnd {
-                    Text(activeEnd, style: .time)
-                } else {
+                // Both labels hold their width, so starting or stopping never
+                // resizes the chip and moves the row between one and two lines.
+                ZStack {
                     Text(l10n.s.keepAwakeUntilLabel + "…")
+                        .opacity(activeEnd == nil ? 1 : 0)
+                    Text(activeEnd ?? Self.widestTime, style: .time)
+                        .opacity(activeEnd == nil ? 0 : 1)
                 }
             }
         }
@@ -30,6 +40,7 @@ struct KeepAwakeEndTimePicker: View {
         .accessibilityAddTraits(activeEnd != nil ? .isSelected : [])
         .fixedSize()
         .accessibilityLabel(l10n.s.keepAwakeUntilLabel)
+        .accessibilityValue(activeEnd.map { $0.formatted(date: .omitted, time: .shortened) } ?? "")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             editor
         }
@@ -192,7 +203,7 @@ private struct TimeDigitWheel: View {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard hovering else { return event }
-            // ponytail: momentum is ignored so a flick stops where the finger lifts.
+            // Momentum is ignored so a flick stops where the finger lifts.
             guard event.momentumPhase.isEmpty else { return nil }
             // Trackpads report fine deltas; a mouse wheel reports whole notches.
             let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 8 : 1
