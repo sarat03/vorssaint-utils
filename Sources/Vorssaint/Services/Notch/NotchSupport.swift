@@ -919,36 +919,45 @@ enum NotchSupport {
         return choice == .music && !showsMusicActivity(isPlaying: isPlaying, in: defaults) ? .none : choice
     }
 
-    /// What the buttons around the island already reach, so Controls leaves
-    /// it out. A section button and its control button count as the same.
+    /// What the visible buttons around the island already open, so Controls
+    /// leaves out the tile that opens the same thing. Cards that work in
+    /// place (playback, volume, brightness) always stay.
     struct Pinned: Equatable {
         var modules: Set<NotchModule> = []
         var controls: Set<NotchControlItem> = []
 
         func contains(_ item: NotchControlItem) -> Bool {
-            controls.contains(item) || item.module.map(modules.contains) ?? false
+            guard ![.music, .volume, .brightness].contains(item) else { return false }
+            return controls.contains(item) || item.module.map(modules.contains) ?? false
         }
     }
 
-    // ponytail: keyed on the saved layout bytes, so the JSON decodes once per
-    // edit instead of on every tile and island resize.
-    private static var pinnedCache: (layout: Data, pinned: Pinned)?
+    // ponytail: only the decode is cached, keyed on the saved layout bytes;
+    // visibility and routing are read fresh so preference changes apply.
+    private static var pinnedCache: (layout: Data, actions: [NotchQuickAction])?
 
     static func pinned(in defaults: UserDefaults = .standard) -> Pinned {
         guard defaults.object(forKey: DefaultsKey.notchHidePinned) as? Bool ?? true else { return Pinned() }
         let layout = defaults.data(forKey: DefaultsKey.notchQuickAccessLayout)
-        if let layout, let cache = pinnedCache, cache.layout == layout { return cache.pinned }
+        let actions: [NotchQuickAction]
+        if let layout, let cache = pinnedCache, cache.layout == layout {
+            actions = cache.actions
+        } else {
+            actions = NotchQuickAccessConfiguration.stored(in: defaults).actions
+            if let layout { pinnedCache = (layout, actions) }
+        }
         var pinned = Pinned()
-        for action in NotchQuickAccessConfiguration.stored(in: defaults).actions {
+        for action in actions where action.isAvailable(in: defaults) {
             switch action {
-            case .module(let module): pinned.modules.insert(module)
+            // Without routing the Scratchpad section is not the floating pad the tile opens.
+            case .module(let module) where module != .scratchpad || routesScratchpad(in: defaults):
+                pinned.modules.insert(module)
             case .control(let item):
                 pinned.controls.insert(item)
                 if let module = item.module { pinned.modules.insert(module) }
             default: break
             }
         }
-        if let layout { pinnedCache = (layout, pinned) }
         return pinned
     }
 
