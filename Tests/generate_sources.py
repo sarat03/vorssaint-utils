@@ -957,6 +957,7 @@ def main():
         "    func refreshPasswordlessStatus(",
         "    func activate(minutes:",
         "    func activate(until date:",
+        "    func startLastPick(",
         "    func resumeAfterSystemTeardown(",
         "    private func activate(end:",
         "    func deactivate(reason:",

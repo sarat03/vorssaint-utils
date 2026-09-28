@@ -2499,19 +2499,20 @@ struct KeepAwakeCard: View {
     @AppStorage(DefaultsKey.keepAwakeMouseJiggleInterval) private var keepAwakeMouseJiggleInterval = 5
     @State private var optionsExpanded = false
     @State private var automationExpanded = false
-    /// The switch restarts whichever kind of chip was picked last, kept across
-    /// panel rebuilds so it never falls back to an indefinite saved duration.
-    @AppStorage(DefaultsKey.keepAwakeSwitchUsesUntil) private var switchUsesUntil = false
+    /// The last started end time, which the popover opens on.
     @AppStorage(DefaultsKey.keepAwakeUntilTime) private var savedUntilTime = 0.0
+    /// An edit not started yet; only starting saves it, so the switch keeps
+    /// restarting the session that actually ran.
+    @State private var untilDraft: Date?
 
     /// Only the hour and minute matter; `resolvedUntilDate` picks the next one.
     private var untilTime: Binding<Date> {
         Binding(
             get: {
-                savedUntilTime > 0 ? Date(timeIntervalSinceReferenceDate: savedUntilTime)
-                    : Date().addingTimeInterval(3600)
+                untilDraft ?? (savedUntilTime > 0 ? Date(timeIntervalSinceReferenceDate: savedUntilTime)
+                    : Date().addingTimeInterval(3600))
             },
-            set: { savedUntilTime = $0.timeIntervalSinceReferenceDate }
+            set: { untilDraft = $0 }
         )
     }
     var collapsible = true
@@ -2807,8 +2808,6 @@ struct KeepAwakeCard: View {
             if selected {
                 awake.toggle()
             } else {
-                defaultDuration = minutes
-                switchUsesUntil = false
                 awake.activate(minutes: minutes)
             }
         } label: {
@@ -2838,8 +2837,8 @@ struct KeepAwakeCard: View {
     private var untilChip: some View {
         KeepAwakeEndTimePicker(selection: untilTime,
                                activeEnd: manualSession && awake.sessionMinutes == nil ? awake.endDate : nil) {
-            switchUsesUntil = true
             awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime.wrappedValue, now: Date()))
+            untilDraft = nil
         }
     }
 
@@ -2924,11 +2923,7 @@ struct KeepAwakeCard: View {
             get: { awake.isActive },
             set: { on in
                 if on {
-                    if switchUsesUntil {
-                        awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime.wrappedValue, now: Date()))
-                    } else {
-                        awake.activate(minutes: defaultDuration)
-                    }
+                    awake.startLastPick()
                 } else if awake.isActive {
                     awake.toggle()
                 }
@@ -2979,7 +2974,6 @@ struct KeepAwakeCard: View {
     }
 }
 
-/// Session duration picker shared by the panel and Settings.
 /// Session durations shared by the panel chips and Settings.
 enum DurationPicker {
     /// The offered durations in minutes; 0 keeps the session open until it
