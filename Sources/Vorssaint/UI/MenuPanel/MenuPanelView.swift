@@ -2499,7 +2499,21 @@ struct KeepAwakeCard: View {
     @AppStorage(DefaultsKey.keepAwakeMouseJiggleInterval) private var keepAwakeMouseJiggleInterval = 5
     @State private var optionsExpanded = false
     @State private var automationExpanded = false
-    @State private var untilTime = Date().addingTimeInterval(3600)
+    /// The switch restarts whichever kind of chip was picked last, kept across
+    /// panel rebuilds so it never falls back to an indefinite saved duration.
+    @AppStorage(DefaultsKey.keepAwakeSwitchUsesUntil) private var switchUsesUntil = false
+    @AppStorage(DefaultsKey.keepAwakeUntilTime) private var savedUntilTime = 0.0
+
+    /// Only the hour and minute matter; `resolvedUntilDate` picks the next one.
+    private var untilTime: Binding<Date> {
+        Binding(
+            get: {
+                savedUntilTime > 0 ? Date(timeIntervalSinceReferenceDate: savedUntilTime)
+                    : Date().addingTimeInterval(3600)
+            },
+            set: { savedUntilTime = $0.timeIntervalSinceReferenceDate }
+        )
+    }
     var collapsible = true
 
     var body: some View {
@@ -2794,12 +2808,18 @@ struct KeepAwakeCard: View {
                 awake.toggle()
             } else {
                 defaultDuration = minutes
+                switchUsesUntil = false
                 awake.activate(minutes: minutes)
             }
         } label: {
-            // The chip keeps its label's width and draws the countdown over
-            // it, so a wider "1:05:12" cannot reflow the row mid-session.
-            Text(DurationPicker.shortTitle(for: minutes, l10n.s, l10n.language))
+            // Every timed chip reserves "0:00:00", so ViewThatFits measures the
+            // countdown and neither a start nor an extend can overflow the row.
+            ZStack {
+                Text(DurationPicker.shortTitle(for: minutes, l10n.s, l10n.language))
+                if minutes > 0 {
+                    Text("0:00:00").hidden()
+                }
+            }
                 .opacity(selected && awake.endDate != nil ? 0 : 1)
                 .overlay {
                     if selected, let end = awake.endDate {
@@ -2816,9 +2836,10 @@ struct KeepAwakeCard: View {
     }
 
     private var untilChip: some View {
-        KeepAwakeEndTimePicker(selection: $untilTime,
+        KeepAwakeEndTimePicker(selection: untilTime,
                                activeEnd: manualSession && awake.sessionMinutes == nil ? awake.endDate : nil) {
-            awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime, now: Date()))
+            switchUsesUntil = true
+            awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime.wrappedValue, now: Date()))
         }
     }
 
@@ -2903,7 +2924,11 @@ struct KeepAwakeCard: View {
             get: { awake.isActive },
             set: { on in
                 if on {
-                    awake.activate(minutes: defaultDuration)
+                    if switchUsesUntil {
+                        awake.activate(until: KeepAwakeAutomationSupport.resolvedUntilDate(picked: untilTime.wrappedValue, now: Date()))
+                    } else {
+                        awake.activate(minutes: defaultDuration)
+                    }
                 } else if awake.isActive {
                     awake.toggle()
                 }

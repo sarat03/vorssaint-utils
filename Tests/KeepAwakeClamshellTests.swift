@@ -126,6 +126,16 @@ enum KeepAwakeClamshellTests {
     }
 
     static func run(expect: (Bool, String) -> Void) {
+        let switching = C.reset()
+        switching.activate(minutes: 15)
+        switching.activate(until: Date().addingTimeInterval(3600))
+        expect(switching.isActive && switching.sessionMinutes == nil && switching.endDate != nil,
+               "an end time replacing a preset session leaves no duration chip selected")
+        switching.activate(minutes: 30)
+        expect(switching.sessionMinutes == 30,
+               "a preset replacing an end-time session selects that preset")
+        switching.deactivate(reason: .manual); C.drain()
+
         let staleStatus = C.reset(); staleStatus.isActive = true
         staleStatus.refreshPasswordlessStatus()
         staleStatus.enableClamshell()

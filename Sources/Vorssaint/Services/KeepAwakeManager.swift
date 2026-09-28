@@ -239,6 +239,8 @@ final class KeepAwakeManager: ObservableObject {
         guard date > Date() else { return }
         automationSuppressedUntilConditionsClear = false
         activate(end: date, trigger: .manual)
+        // An end time replaces any running preset, so no duration chip stays selected.
+        sessionMinutes = nil
     }
 
     private func activate(end: Date?, trigger: SessionTrigger) {
