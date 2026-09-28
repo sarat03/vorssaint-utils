@@ -22,6 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var popoverLastWindowNumber: Int?
     private var popoverForeignReopenAt = Date.distantPast
     private var popoverIsSwitchingAnchor = false
+    /// The app to hand activation back to when the panel is dismissed, so
+    /// Vorssaint does not stay in front. Captured when a click opens the panel
+    /// and kept current by the observers below while the panel is shown.
+    private var panelActivationSource: NSRunningApplication?
+    private var panelActivationObservers: [NSObjectProtocol] = []
+    private var popoverCloseReason: PanelCloseReason?
     private var metricAnchorSwitchSerial = 0
     private var popoverCloseCompletions: [() -> Void] = []
     private var isTerminating = false
@@ -34,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var supportIntroWindow: NSWindow?
     private var updateHighlightsWindow: NSWindow?
     private var supportIntroCanClose = false
+    private var supportIntroIsReview = false
+    private var updateHighlightsIsReview = false
     private var updateShowcaseWindow: NSWindow?
     private var updatePreviewWindow: NSWindow?
 
@@ -153,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             .receive(on: DispatchQueue.main)
             .sink { _ in
                 FeatureRuntime.shared.sync([
-                    .scrollInverter, .scrollHorizontal, .focusFollowsMouse, .smoothScroll, .mouseNavigation, .switcher,
+                    .scrollInverter, .scrollHorizontal, .focusFollowsMouse, .smoothScroll, .linearScroll, .mouseNavigation, .switcher,
                     .dockPreview, .finderCutPaste, .finderRename, .autoQuit, .dockClick,
                     .middleClick, .windowMaximizer, .keyboardDebounce, .windowLayout,
                     .textSnippets, .brightness, .radialMenu, .mouseButtonShortcuts,
@@ -189,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             guard let self else { return }
             #if VORSSAINT_DEVELOPMENT
             if CommandLine.arguments.contains("--preview-notch-tour") {
-                self.showUpdateHighlights()
+                self.showUpdateHighlights(isReview: true)
                 return
             }
             #endif
@@ -431,7 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func togglePopover(anchor button: NSStatusBarButton? = nil) {
         if popover.isShown {
-            closePopover()
+            closePopover(reason: .statusItem)
             return
         }
         showPopover(anchor: button)
@@ -461,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if MenuPanelFocus.shared.activeMetric == detailKind {
                 metricAnchorSwitchSerial &+= 1
                 MenuPanelFocus.shared.clearMetricFocus()
-                closePopover(animated: false)
+                closePopover(animated: false, reason: .statusItem)
                 return
             }
             MenuPanelFocus.shared.focus(detailKind)
@@ -920,6 +928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 MenuPanelFocus.shared.setSwitchingMetricAnchor(false)
                 if !self.popover.isShown {
                     self.statusController.setMicBadgeHeld(false)
+                    self.endPanelActivationTracking()
                 }
                 return
             }
@@ -963,10 +972,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             window.makeKey()
             popoverIsClosing = false
             popoverCloseIsAppRequested = false
+            popoverCloseReason = nil
         } else {
             statusController.setMicBadgeHeld(false)
         }
         if activate {
+            beginPanelActivationTracking()
             NSApp.activate(ignoringOtherApps: true)
         }
         // Only arm the monitors and the anchor if the popover actually presented
@@ -975,6 +986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         guard popover.isShown else {
             statusController.setMicBadgeHeld(false)
             endPopoverDriftCorrection()
+            endPanelActivationTracking()
             return
         }
         if let window = popover.contentViewController?.view.window {
@@ -994,7 +1006,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             guard let self, self.popover.isShown else { return }
             guard !PanelInteractionState.shared.preventsPopoverDismissal else { return }
             guard self.statusController.containsStatusItem(at: NSEvent.mouseLocation) == false else { return }
-            self.closePopover()
+            self.closePopover(reason: .outsideClick)
         }
 
         // Local events cover our own Settings window. Keep Settings + panel open
@@ -1005,7 +1017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         ) { [weak self] event in
             guard let self, self.popover.isShown else { return event }
             if self.shouldDismissPopover(forLocalEvent: event) {
-                self.closePopover()
+                self.closePopover(reason: .outsideClick)
             }
             return event
         }
@@ -1043,7 +1055,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func handlePopoverKeyDown(_ event: NSEvent) -> NSEvent? {
         if popover.isShown, event.keyCode == UInt16(kVK_Escape) {
-            closePopover()
+            closePopover(reason: .escape)
             return nil
         }
 
@@ -1105,25 +1117,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         openSettingsWindow()
     }
 
+    /// Callers other than the dismissal paths are panel actions, so `reason`
+    /// defaults to one that leaves activation alone.
     func closePopover(animated: Bool = true, after delay: TimeInterval = 0,
-                      preservingNotch: Bool = false, completion: (() -> Void)? = nil) {
+                      preservingNotch: Bool = false, reason: PanelCloseReason = .action,
+                      completion: (() -> Void)? = nil) {
         if !preservingNotch, NotchSupport.isEnabled() { NotchService.shared.collapse() }
         if delay <= 0 {
-            closePopoverNow(animated: animated, completion: completion)
+            closePopoverNow(animated: animated, reason: reason, completion: completion)
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.closePopoverNow(animated: animated, completion: completion)
+            self?.closePopoverNow(animated: animated, reason: reason, completion: completion)
         }
     }
 
-    private func closePopoverNow(animated: Bool, completion: (() -> Void)?) {
+    private func closePopoverNow(animated: Bool, reason: PanelCloseReason,
+                                 completion: (() -> Void)?) {
         guard popover.isShown else {
             completion?()
             return
         }
         if let completion { popoverCloseCompletions.append(completion) }
         popoverCloseIsAppRequested = true
+        // Any request in the same close that hands work to something else
+        // wins, so a dismissal racing an action never takes activation back.
+        if popoverCloseReason?.dismissesWithoutTakeover != false {
+            popoverCloseReason = reason
+        }
         guard !popoverIsClosing else { return }
 
         popoverIsClosing = true
@@ -1190,10 +1211,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         popoverClosedAt = popoverIsSwitchingAnchor ? .distantPast : Date()
         popoverIsClosing = false
         popoverCloseIsAppRequested = false
+        let closeReason = popoverCloseReason
+        popoverCloseReason = nil
         runPopoverCloseCompletions()
         if let recoveryAnchor {
             reopenPanelAfterForeignClose(anchor: recoveryAnchor)
+        } else if !popoverIsSwitchingAnchor {
+            returnActivation(to: endPanelActivationTracking(), after: closeReason)
         }
+    }
+
+    /// Remembers the app in front as the panel opens with activation, and
+    /// follows it while the panel is shown. The observers live only as long as
+    /// the panel: an anchor switch or an in-place reopen keeps them, a real
+    /// close ends them.
+    private func beginPanelActivationTracking() {
+        endPanelActivationTracking()
+        let ownPID = NSRunningApplication.current.processIdentifier
+        let front = NSWorkspace.shared.frontmostApplication
+        // Opened while Vorssaint was already in front (from Settings, say):
+        // there is nothing to hand back when the panel closes.
+        panelActivationSource = front?.processIdentifier == ownPID ? nil : front
+        let center = NSWorkspace.shared.notificationCenter
+        panelActivationObservers = [
+            center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                self?.updatePanelActivationSource(.activeSpaceChanged)
+            },
+            center.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                               object: nil, queue: .main) { [weak self] note in
+                guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                        as? NSRunningApplication else { return }
+                self?.updatePanelActivationSource(.appActivated(app))
+            },
+        ]
+    }
+
+    private func updatePanelActivationSource(_ change: PanelActivationChange<NSRunningApplication>) {
+        let ownPID = NSRunningApplication.current.processIdentifier
+        panelActivationSource = StatusItemAnchorSupport.panelActivationSource(
+            after: change, current: panelActivationSource,
+            isOwnApp: { $0.processIdentifier == ownPID })
+    }
+
+    /// Stops following activation and returns the app remembered last.
+    @discardableResult
+    private func endPanelActivationTracking() -> NSRunningApplication? {
+        let center = NSWorkspace.shared.notificationCenter
+        panelActivationObservers.forEach { center.removeObserver($0) }
+        panelActivationObservers.removeAll()
+        let source = panelActivationSource
+        panelActivationSource = nil
+        return source
+    }
+
+    /// Closing the panel leaves Vorssaint active, and macOS keeps reporting it
+    /// as the frontmost app until something else is focused, which misleads
+    /// window managers and anything that follows the active app.
+    private func returnActivation(to source: NSRunningApplication?, after closeReason: PanelCloseReason?) {
+        guard let source, closeReason?.dismissesWithoutTakeover == true else { return }
+        // One turn later, so the close animation has finished and anything the
+        // dismissal itself focused has become key.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.popover.isShown, !source.isTerminated,
+                  StatusItemAnchorSupport.shouldReturnActivation(
+                      to: source.processIdentifier,
+                      ownPID: NSRunningApplication.current.processIdentifier,
+                      frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+                      ownWindowIsKey: NSApp.keyWindow != nil || NSApp.modalWindow != nil,
+                      closeReason: closeReason),
+                  !self.handbackWouldSwitchDesktop(to: source.processIdentifier)
+            else { return }
+            ActivationHandoff.yield(to: source)
+            if !source.activate(from: NSRunningApplication.current, options: []) {
+                source.activate(options: [])
+            }
+        }
+    }
+
+    /// Reads the Spaces of the app's normal windows from the window server.
+    /// Windows the app has ordered out (minimized, or kept after a close) do
+    /// not make activation travel, so they are left out.
+    private func handbackWouldSwitchDesktop(to pid: pid_t) -> Bool {
+        guard SpaceWindowBridge.canResolveSpaces,
+              let info = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements],
+                                                    kCGNullWindowID) as? [[String: Any]]
+        else { return false }
+        let windowSpaces: [[UInt64]] = info.compactMap { window in
+            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
+                  (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                  let number = (window[kCGWindowNumber as String] as? NSNumber)?.uint32Value
+            else { return nil }
+            let windowID = CGWindowID(number)
+            guard SpaceWindowBridge.isWindowOrderedIn(windowID) != false else { return nil }
+            return SpaceWindowBridge.spaces(of: windowID)
+        }
+        return StatusItemAnchorSupport.handbackWouldSwitchDesktop(
+            windowSpaces: windowSpaces,
+            visibleSpaces: SpaceWindowBridge.topology()?.visibleSpaces)
     }
 
     /// What the panel was holding open only for as long as it was on screen.
@@ -1240,6 +1355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if !self.popover.isShown {
                 self.statusController.setMicBadgeHeld(false)
                 self.releasePanelResources()
+                self.endPanelActivationTracking()
             }
         }
     }
@@ -1893,9 +2009,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return true
     }
 
-    func showUpdateHighlights() {
+    func showUpdateHighlights(isReview: Bool = false) {
         closePopover()
         if let window = updateHighlightsWindow {
+            centerIntroWindow(window)
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             return
@@ -1917,6 +2034,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         window.hidesOnDeactivate = false
         window.delegate = self
         centerIntroWindow(window)
+        updateHighlightsIsReview = isReview
         updateHighlightsWindow = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -1947,8 +2065,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func markUpdateHighlightsSeen() {
-        guard UpdateHighlightsInfo.matchesRelease(AppInfo.version) else { return }
-        UserDefaults.standard.set(UpdateHighlightsInfo.releaseVersion,
+        guard let marker = UpdateHighlightsInfo.seenVersion(for: AppInfo.version) else { return }
+        UserDefaults.standard.set(marker,
                                   forKey: DefaultsKey.updateHighlightsSeenVersion)
     }
 
@@ -2000,9 +2118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func showSupportUpdateIntroIfNeeded() -> Bool {
-        // Same shape as the showcase gate: the window belongs to one specific
-        // release. Any other version never shows it, so an update that is not
-        // that release cannot resurrect the ask.
+        // Stable patches share one invitation, even if the first installed
+        // version in this release series is a hotfix.
         guard SupportUpdateIntroInfo.shouldShow(
             appVersion: AppInfo.version,
             lastSeenVersion: UserDefaults.standard.string(forKey: DefaultsKey.supportUpdateIntroVersion)
@@ -2011,8 +2128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return true
     }
 
-    private func showSupportUpdateIntro() {
-        guard !AppInfo.isBeta else { return }
+    private func showSupportUpdateIntro(isReview: Bool = false) {
+        guard !isTerminating, isReview || !AppInfo.isBeta else { return }
         closePopover()
         if let window = supportIntroWindow {
             NSApp.activate(ignoringOtherApps: true)
@@ -2022,7 +2139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let host = NSHostingController(rootView: UpdateSupportIntroView(
             onFinish: { [weak self] in
                 self?.supportIntroCanClose = true
-                self?.markSupportUpdateIntroSeen()
                 self?.supportIntroWindow?.close()
             }
         ))
@@ -2041,6 +2157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         window.hidesOnDeactivate = false
         window.delegate = self
         supportIntroCanClose = false
+        supportIntroIsReview = isReview
         centerIntroWindow(window)
         supportIntroWindow = window
         NSApp.activate(ignoringOtherApps: true)
@@ -2060,12 +2177,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// inside the visible area, so a window taller than the screen starts at
     /// the top instead of hanging below it.
     private func centerIntroWindow(_ window: NSWindow) {
+        let visible = (window.screen ?? popover.contentViewController?.view.window?.screen)?.visibleFrame ?? NSScreen.pointerVisibleFrame
+        if let host = window.contentViewController as? NSHostingController<UpdateHighlightsView>,
+           host.rootView.availableSize != visible.size {
+            host.rootView.availableSize = visible.size
+        }
         window.contentView?.layoutSubtreeIfNeeded()
         if let fitting = window.contentViewController?.view.fittingSize,
            fitting.width > 0, fitting.height > 0 {
             window.setContentSize(fitting)
         }
-        let visible = (window.screen ?? popover.contentViewController?.view.window?.screen)?.visibleFrame ?? NSScreen.pointerVisibleFrame
         let size = window.frame.size
         let x = min(max(visible.midX - size.width / 2, visible.minX), max(visible.minX, visible.maxX - size.width))
         let y = min(max(visible.midY - size.height / 2, visible.minY), max(visible.minY, visible.maxY - size.height))
@@ -2179,7 +2300,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if window === supportIntroWindow {
             supportIntroWindow = nil
             supportIntroCanClose = false
-            guard !isTerminating else { return }
+            let isReview = supportIntroIsReview
+            supportIntroIsReview = false
+            guard !isTerminating, !isReview else { return }
             markSupportUpdateIntroSeen()
             finishedUpdateIntro = true
         }
@@ -2191,7 +2314,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         if window === updateHighlightsWindow {
             updateHighlightsWindow = nil
+            let isReview = updateHighlightsIsReview
+            updateHighlightsIsReview = false
             guard !isTerminating else { return }
+            if isReview {
+                DispatchQueue.main.async { [weak self] in self?.showSupportUpdateIntro(isReview: true) }
+                return
+            }
             markUpdateHighlightsSeen()
             finishedUpdateIntro = true
         }
@@ -2219,11 +2348,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func markSupportUpdateIntroSeenIfCurrentUpdate() {
+        guard SupportUpdateIntroInfo.matchesRelease(AppInfo.version) else { return }
         markSupportUpdateIntroSeen()
     }
 
     private func markSupportUpdateIntroSeen() {
-        UserDefaults.standard.set(SupportUpdateIntroInfo.releaseVersion,
+        UserDefaults.standard.set(SupportUpdateIntroInfo.seenVersion,
                                   forKey: DefaultsKey.supportUpdateIntroVersion)
     }
 

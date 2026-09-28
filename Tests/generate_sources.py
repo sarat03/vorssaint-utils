@@ -65,6 +65,14 @@ def main():
                         "    static func imageCapture(")
           + "}\n")
     panel = "Sources/Vorssaint/App/AppDelegate.swift"
+    write("UpdateIntroFlow.swift", "import AppKit\nimport Foundation\n"
+          + "extension UpdateIntroFlowTests {\nfinal class Host: Fixture {\n"
+          + "".join(declaration(panel, prefix).replace("    private ", "    ", 1) for prefix in [
+              "    private func presentUpdateIntros()", "    private func showUpdateHighlightsIfNeeded()",
+              "    private func markUpdateHighlightsSeen()", "    private func showSupportUpdateIntroIfNeeded()",
+              "    func windowShouldClose(", "    func windowWillClose(", "    private func markOnboardingComplete()",
+              "    private func markSupportUpdateIntroSeenIfCurrentUpdate()", "    private func markSupportUpdateIntroSeen()"])
+          + "}\n}\n")
     write("PostUpdateStatusItemRecovery.swift", "import AppKit\nimport Foundation\n"
           + "extension PostUpdateStatusItemRecoveryTests {\nfinal class Host: Fixture {\n"
           + "".join(declaration(panel, prefix).replace("private ", "") for prefix in [
@@ -85,7 +93,8 @@ def main():
               "    private func armPopoverDriftCorrection(", "    private func endPopoverDriftCorrection(",
               "    private func showPopover(", "    func popoverWillClose(", "    func popoverDidClose(",
               "    private func releasePanelResources(", "    private func anchorAfterForeignClose(",
-              "    private func reopenPanelAfterForeignClose(", "    private func shouldDismissPopover("])
+              "    private func reopenPanelAfterForeignClose(", "    private func shouldDismissPopover(",
+              "    private func closePopoverNow("])
           + "var popoverAnchor: PanelAnchor?\nvar lastGoodPanelAnchor: PanelAnchor?\n"
           + "}\n}\n")
     brightness = "Sources/Vorssaint/Services/Display/BrightnessService.swift"
@@ -117,10 +126,22 @@ def main():
           + "}\nextension SwitcherActivationTests.Bridge {\n"
           + declaration("Sources/Vorssaint/Services/Switcher/SpaceWindowBridge.swift",
                         "    static func frontWindow(") + "}\n")
+    write("WindowServerCapture.swift", "import CoreGraphics\nimport Foundation\n"
+          + "extension WindowServerCaptureContract.Provider {\n"
+          + declaration("Sources/Vorssaint/Services/Switcher/WindowPreviewProvider.swift",
+                        "    static func captureViaWindowServer(")
+          + "}\n")
     write("ScratchpadExport.swift", "import AppKit\nimport Foundation\n"
           + "extension ScratchpadExportContract {\nfinal class Service: Fixture {\n"
           + declaration("Sources/Vorssaint/Services/QuickTools/ScratchpadService.swift",
                         "    func exportText(")
+          + "}\n}\n")
+    write("ScratchpadSave.swift", "import Foundation\n"
+          + "extension ScratchpadSaveContract {\nfinal class Service: Fixture {\n"
+          + "".join(declaration("Sources/Vorssaint/Services/QuickTools/ScratchpadService.swift", prefix)
+                    .replace("private func", "func", 1) for prefix in [
+                        "    func commitEdits(", "    private func flushSave(", "    private func save(",
+                        "    func createPad("])
           + "}\n}\n")
     write("MusicLaunchBlockerLifecycle.swift", "import AppKit\nimport Foundation\n"
           + "extension MusicLaunchBlockerContract {\nfinal class Service: Fixture {\n"
@@ -155,7 +176,8 @@ def main():
           + declaration(clipboard, "    func updateText(")
           + "".join(declaration(clipboard, prefix).replace("private ", "", 1) for prefix in [
               "    func togglePin(", "    func copy(_ entry:", "    private func touch(",
-              "    private var firstRecentIndex:", "    private func normalizeEntryOrder("])
+              "    private var firstRecentIndex:", "    private func normalizeEntryOrder(",
+              "    func filteredEntries(", "    private func foldedCandidates("])
           + "func setEntries(_ values: [ClipboardHistoryEntry]) { entries = values }\n"
           + "}\n}\n")
     write("CommandBarInputSource.swift", "import Foundation\n"
@@ -255,6 +277,22 @@ def main():
                                    "    private func handleDockHoldInput(type:",
                                    "    private func handle(type:",
                                    "    func commit("])
+          + "}\n")
+    # The raw wheel tap runs as shipped: linear scrolling's cap, carry and
+    # write-back, then the direction change. Only the services it asks and
+    # the defaults it reads are fixtures.
+    wheel_tap = declaration("Sources/Vorssaint/Services/ScrollInverter.swift", "    private func handle(type:",
+                            scope="final class ScrollInverter:")
+    if wheel_tap.count("AppFeature.linearScroll.isAvailable") != 1:
+        raise ValueError("Expected one linear scrolling availability read in ScrollInverter.handle")
+    write("LinearScrollTap.swift", "import CoreGraphics\nimport Foundation\nextension LinearScrollTapTests.Inverter {\n"
+          + wheel_tap.replace("private func", "func", 1)
+                     .replace("AppFeature.linearScroll.isAvailable", "AppFeature.linearScroll.isAvailable(in: defaults)")
+          + "}\n")
+    write("KeyboardDebounceTap.swift", "import ApplicationServices\nimport CoreGraphics\nimport Foundation\n"
+          + "extension KeyboardDebounceTapTests.Service {\n"
+          + declaration("Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceService.swift",
+                        "    private func handle(type:").replace("private func", "func", 1)
           + "}\n")
     # Entire input/mute services retain their production control flow. Only
     # visibility, scheduling, defaults and HAL transport are replaced by fixtures.
@@ -358,6 +396,16 @@ def main():
           + declaration(updates, "    private func publisherFindings(").replace("private func", "func", 1).replace("Date()", "self.clock.now()")
           + declaration(updates, "    private func onlineCatalogFindings(").replace("private func", "func", 1).replace("Date()", "self.clock.now()")
           + declaration(updates, "    private func onlineResult(").replace("private func", "func", 1)
+          + "}\n}\n")
+    # Rule mutations and completion stay verbatim; only declaration visibility changes.
+    write("AppUpdateRules.swift", "import Foundation\nextension AppUpdateRulesContract {\n"
+          + "final class Service: State {\n"
+          + "".join(declaration(updates, prefix).replace("private func", "func", 1)
+                    for prefix in ["    func skipVersion(", "    func excludeApp(",
+                                   "    private func setRule(", "    func removeRule(",
+                                   "    private func saveRules(", "    private func reloadRules(",
+                                   "    private func applyRules(", "    private func finishCheck(",
+                                   "    private static func announcedIDs(", "    private static func saveAnnouncedIDs("])
           + "}\n}\n")
     playback_adapter = "Sources/NowPlayingAdapter/NowPlayingSelection.swift"
     adapter_entry = "Sources/NowPlayingAdapter/NowPlayingAdapter.swift"
@@ -472,6 +520,12 @@ def main():
           + "final class Service: Fixture {\n"
           + declaration(update, "    private func launchAdminInstaller(").replace("private ", "", 1)
           + "}\n}\n")
+    highlights = "Sources/Vorssaint/UI/UpdateHighlightsView.swift"
+    write("UpdateHighlights.swift", "import AppKit\nimport SwiftUI\nextension UpdateHighlightsTests {\n"
+          + "".join(declaration(highlights, prefix) for prefix in [
+              "struct UpdateHighlightsView:", "enum UpdateHighlightsLayout", "private struct UpdateHighlightsGIF:"])
+              .replace("private struct UpdateHighlightsGIF", "struct UpdateHighlightsGIF")
+          + "}\n")
     canvas = "Sources/Vorssaint/Services/Notch/NotchWindowHost.swift"
     write("NotchMissionControlPolling.swift", "import Foundation\n"
           + "extension NotchMissionControlPollingTests {\nfinal class Host: State {\n"

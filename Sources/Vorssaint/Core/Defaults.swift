@@ -58,6 +58,8 @@ enum DefaultsKey {
     static let focusFollowsMouseExceptions = "focusFollowsMouseExceptions"
     static let smoothScrollEnabled = "smoothScrollEnabled"
     static let smoothScrollStep = "smoothScrollStep"      // pixels per wheel tick
+    static let linearScrollEnabled = "linearScrollEnabled" // every mouse wheel notch scrolls the same lines (issue #403)
+    static let linearScrollLines = "linearScrollLines"     // lines per wheel notch while linear scrolling is on
     static let mouseAccelerationDisabled = "mouseAccelerationDisabled" // sets HIDMouseAcceleration to -1 for mice
     static let smoothScrollResponse = "smoothScrollResponse" // 0...100, higher follows the wheel sooner
     static let smoothScrollCoast = "smoothScrollCoast" // 0...100, higher coasts the same distance out longer
@@ -79,6 +81,7 @@ enum DefaultsKey {
     static let superKeyMappedSource = "superKeyMappedSource"
     // One list of bundle ids per mouse feature: apps it leaves alone (issue #358).
     static let smoothScrollExceptions = "smoothScrollExceptions"
+    static let linearScrollExceptions = "linearScrollExceptions"
     static let scrollInverterExceptions = "scrollInverterExceptions"
     static let mouseNavigationExceptions = "mouseNavigationExceptions"
     static let mouseButtonExceptions = "mouseButtonExceptions"
@@ -298,6 +301,7 @@ enum DefaultsKey {
     static let appUpdatesIncludeAppStore = "appUpdatesIncludeAppStore"
     static let appUpdatesIncludeOnlineCatalog = "appUpdatesIncludeOnlineCatalog"
     static let appUpdatesNotify = "appUpdatesNotify"
+    static let appUpdatesRules = "appUpdatesRules" // JSON, portable bundle-ID rules
     static let appUpdatesLastCheck = "appUpdatesLastCheck"            // Double, epoch seconds
     static let appUpdatesLastCount = "appUpdatesLastCount"
     // Findings already announced once, so a pending update nobody installs
@@ -325,6 +329,7 @@ enum DefaultsKey {
     static let panelControlRadialMenu = "panelControlRadialMenu"
     static let panelControlMouseButtonShortcuts = "panelControlMouseButtonShortcuts"
     static let panelControlMouseAcceleration = "panelControlMouseAcceleration"
+    static let panelControlLinearScroll = "panelControlLinearScroll"
     static let panelControlMouseClickDebounce = "panelControlMouseClickDebounce"
     // Quick-control categories start collapsed and remember being opened.
     static let panelControlWindowsExpanded = "panelControlWindowsExpanded"
@@ -588,6 +593,7 @@ enum DefaultsKey {
     static let scratchpadCloseOnClickOutside = "scratchpadCloseOnClickOutside"
     static let scratchpadBackgroundOpacity = "scratchpadBackgroundOpacity" // opaque fill over the pad material (ScratchpadSupport.backgroundOpacityRange)
     static let scratchpadDocument = "scratchpadDocument"     // Data: ScratchpadDocument JSON, including named tabs
+    static let scratchpadTextSize = "scratchpadTextSize"     // pad-wide point size (ScratchpadSupport.textSizeRange)
     static let micMuteActive = "micMuteActive"               // mic muted by the app (survives relaunch)
     static let micMuteSavedVolume = "micMuteSavedVolume"     // input volume to restore on unmute (pre 3.2.0 state)
     static let micMuteSavedVolumes = "micMuteSavedVolumes"   // [device uid: input volume] to restore on unmute
@@ -794,6 +800,7 @@ enum DefaultsKey {
     static let notchDownloadsFolderBookmark = "notchDownloadsFolderBookmark"
     static let notchCalendarEnabled = "notchCalendarEnabled"
     static let notchCalendarCountdown = "notchCalendarCountdown"
+    static let notchCalendarExcluded = "notchCalendarExcluded" // [EKCalendar.calendarIdentifier] left out of the island
     // AI agents: what the island reads from Claude Code and Codex, and shows.
     static let notchAgentsEnabled = "notchAgentsEnabled"
     static let notchAgentsClaude = "notchAgentsClaude"
@@ -868,15 +875,17 @@ enum OnboardingInfo {
 
 /// The one-time tour of this release's headline feature, shown after updating.
 enum UpdateHighlightsInfo {
-    /// One tour shared by the betas and final release.
-    static let releaseVersion = "3.4.0-beta.1"
+    // Keep this marker unchanged for every stable patch in the 3.4 series.
+    static let releaseVersion = "3.4.0"
+    static let betaSeenVersion = "3.4.0-beta.1"
 
     static func matchesRelease(_ appVersion: String) -> Bool {
         guard let version = UpdateServiceSupport.SemanticVersion(raw: appVersion),
               let release = UpdateServiceSupport.SemanticVersion(raw: releaseVersion),
-              (version.major, version.minor, version.patch) == (release.major, release.minor, release.patch) else { return false }
+              (version.major, version.minor) == (release.major, release.minor),
+              version.patch >= release.patch else { return false }
         if version.prerelease.isEmpty { return true }
-        guard (2...3).contains(version.prerelease.count), version.prerelease[0].description == "beta",
+        guard version.patch == release.patch, (2...3).contains(version.prerelease.count), version.prerelease[0].description == "beta",
               let number = Int(version.prerelease[1].description) else { return false }
         if version.prerelease.count == 3 {
             guard case let .numeric(hotfix) = version.prerelease[2], hotfix >= 0 else { return false }
@@ -885,7 +894,14 @@ enum UpdateHighlightsInfo {
     }
 
     static func shouldShow(appVersion: String, lastSeenVersion: String?) -> Bool {
-        matchesRelease(appVersion) && lastSeenVersion != releaseVersion
+        guard let marker = seenVersion(for: appVersion) else { return false }
+        return lastSeenVersion != marker
+    }
+
+    static func seenVersion(for appVersion: String) -> String? {
+        guard matchesRelease(appVersion),
+              let version = UpdateServiceSupport.SemanticVersion(raw: appVersion) else { return nil }
+        return version.prerelease.isEmpty ? releaseVersion : betaSeenVersion
     }
 }
 
@@ -910,13 +926,23 @@ enum BrightnessUpdatePromptInfo {
 }
 
 enum SupportUpdateIntroInfo {
-    /// The single release whose first launch shows the update intro. It used
-    /// to track AppInfo.version, which re-showed the ask on every update; now a
-    /// release only shows it when this constant is deliberately bumped.
+    /// The stable release series that gets this invitation. Patch updates share
+    /// one completion marker, including when someone skips the initial release.
     static let releaseVersion = "3.4.0"
 
+    // Older beta onboarding wrote the release version before this screen was
+    // available. A distinct completion marker keeps those upgraders eligible.
+    static let seenVersion = "3.4.0-support"
+
+    static func matchesRelease(_ appVersion: String) -> Bool {
+        guard let version = UpdateServiceSupport.SemanticVersion(raw: appVersion),
+              let release = UpdateServiceSupport.SemanticVersion(raw: releaseVersion) else { return false }
+        return (version.major, version.minor) == (release.major, release.minor)
+            && version.patch >= release.patch && version.prerelease.isEmpty
+    }
+
     static func shouldShow(appVersion: String, lastSeenVersion: String?) -> Bool {
-        appVersion == releaseVersion && lastSeenVersion != releaseVersion
+        matchesRelease(appVersion) && lastSeenVersion != seenVersion
     }
 }
 
@@ -1092,6 +1118,8 @@ enum Defaults {
         DefaultsKey.focusFollowsMouseDelay: FocusFollowsMouseSupport.defaultDelayMilliseconds,
         DefaultsKey.smoothScrollEnabled: false,
         DefaultsKey.smoothScrollStep: 40,
+        DefaultsKey.linearScrollEnabled: false,
+        DefaultsKey.linearScrollLines: ScrollWheelSupport.defaultLinesPerNotch,
         DefaultsKey.mouseAccelerationDisabled: false,
         DefaultsKey.smoothScrollResponse: SmoothScrollSupport.defaultResponse,
         DefaultsKey.smoothScrollCoast: SmoothScrollSupport.defaultCoast,
@@ -1108,6 +1136,7 @@ enum Defaults {
         DefaultsKey.superKeyModifiers: SuperKeySupport.defaultModifierStorageValue,
         DefaultsKey.superKeySoloAction: SuperKeySoloAction.none.rawValue,
         DefaultsKey.smoothScrollExceptions: [String](),
+        DefaultsKey.linearScrollExceptions: [String](),
         DefaultsKey.scrollInverterExceptions: [String](),
         DefaultsKey.focusFollowsMouseExceptions: [String](),
         DefaultsKey.mouseNavigationExceptions: [String](),
@@ -1303,6 +1332,7 @@ enum Defaults {
         DefaultsKey.notchAccessoriesEnabled: true,
         DefaultsKey.notchCalendarEnabled: true,
         DefaultsKey.notchCalendarCountdown: false,
+        DefaultsKey.notchCalendarExcluded: [String](),
         DefaultsKey.notchAgentsEnabled: true,
         DefaultsKey.notchAgentsClaude: true,
         DefaultsKey.notchAgentsCodex: true,
@@ -1376,6 +1406,7 @@ enum Defaults {
         DefaultsKey.appUpdatesIncludeAppStore: true,
         DefaultsKey.appUpdatesIncludeOnlineCatalog: true,
         DefaultsKey.appUpdatesNotify: true,
+        DefaultsKey.appUpdatesRules: "[]",
         DefaultsKey.appUpdatesLastCheck: 0.0,
         DefaultsKey.appUpdatesLastCount: 0,
         DefaultsKey.appUpdatesNotifiedIDs: [String](),
@@ -1401,6 +1432,7 @@ enum Defaults {
         DefaultsKey.panelControlRadialMenu: true,
         DefaultsKey.panelControlMouseButtonShortcuts: true,
         DefaultsKey.panelControlMouseAcceleration: true,
+        DefaultsKey.panelControlLinearScroll: true,
         DefaultsKey.panelControlMouseClickDebounce: true,
         DefaultsKey.panelControlWindowsExpanded: false,
         DefaultsKey.panelControlInputExpanded: false,
@@ -1613,6 +1645,7 @@ enum Defaults {
         DefaultsKey.scratchpadRetention: ScratchpadRetention.never.rawValue,
         DefaultsKey.scratchpadCloseOnClickOutside: true,
         DefaultsKey.scratchpadBackgroundOpacity: 0.0,
+        DefaultsKey.scratchpadTextSize: ScratchpadSupport.defaultTextSize,
         DefaultsKey.micMuteActive: false,
         DefaultsKey.micMuteSavedVolume: 0.75,
         DefaultsKey.micMuteMenuBarIndicator: true,  // owner's call: on by default in 3.1.8 (badge only shows while muted)
