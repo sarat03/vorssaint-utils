@@ -21,7 +21,7 @@ enum NotchPresentationProbe {
     /// is only registered, so nothing is written to disk.
     private static let glassDefaults: UserDefaults = {
         let defaults = UserDefaults(suiteName: "com.vorssaint.tests.notch-presentation")!
-        defaults.register(defaults: [DefaultsKey.liquidGlassEnabled: CommandLine.arguments.contains("--glass")])
+        defaults.register(defaults: [DefaultsKey.notchLiquidGlassEnabled: CommandLine.arguments.contains("--glass")])
         return defaults
     }()
 
@@ -408,6 +408,17 @@ enum NotchPresentationProbe {
         host.panel.ignoresMouseEvents = true
         host.panel.orderFrontRegardless()
         var failures = checkHiddenReveal(screen: screen)
+        host.setOutline(enabled: true, color: .systemOrange)
+        if host.outlineProbeOpacity != 1 || host.outlineProbeWidth != 2 {
+            failures.append("the optional outline is not visible around the compact island")
+        }
+        if !host.outlineProbeTopOpen {
+            failures.append("the outline draws a line along the top of the screen")
+        }
+        host.setOutline(enabled: false, color: .white)
+        if host.outlineProbeOpacity != 0 || host.outlineProbeWidth != 0.5 {
+            failures.append("turning off the outline did not restore the compact island")
+        }
         if host.panel.collectionBehavior.intersection([.managed, .transient, .stationary]) != .stationary
             || !host.panel.collectionBehavior.contains(.canJoinAllSpaces) {
             failures.append("the island must stay stationary when revealing the desktop, without a conflicting window motion policy")

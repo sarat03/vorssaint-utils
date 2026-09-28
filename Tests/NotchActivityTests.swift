@@ -497,26 +497,14 @@ enum NotchActivityTests {
     }
 
     private static func compactTimerContracts(_ suite: TestSuite) {
-        suite.expect(NotchSupport.compactCompanion(timer: true, running: true, downloads: true, agents: true, music: true) == .downloads
-               && NotchSupport.compactCompanion(timer: true, running: true, downloads: false, agents: true, music: true) == .agents
-               && NotchSupport.compactCompanion(timer: true, running: true, downloads: false, agents: false, music: true) == .music
-               && NotchSupport.compactCompanion(timer: true, running: true, downloads: false, agents: false, music: false) == nil,
-               "a running timer shares the island with the next live activity, in the island's own order")
-        suite.expect(NotchSupport.compactCompanion(timer: true, running: false, downloads: false, agents: true, music: true) == nil
-               && NotchSupport.compactCompanion(timer: true, running: false, downloads: false, agents: false, music: true) == nil
-               && NotchSupport.compactCompanion(timer: true, running: false, downloads: true, agents: true, music: true) == .downloads,
-               "a paused or finished timer keeps its mark beside music or agents, and a download still takes the wing")
-        for running in [false, true] {
-            for downloads in [false, true] {
-                for agents in [false, true] {
-                    for music in [false, true] {
-                        suite.expect(NotchSupport.compactCompanion(timer: false, running: running, downloads: downloads,
-                                                                   agents: agents, music: music) == nil,
-                               "without a timer, one activity keeps both wings of the island")
-                    }
-                }
-            }
-        }
+        suite.expect(NotchSupport.compactCompanions(timer: true, running: true, downloads: true, agents: true, music: true)
+                        == [.downloads, .agents, .music],
+                     "a running timer offers every supported pair instead of silently choosing one")
+        suite.expect(NotchSupport.compactCompanions(timer: true, running: false, downloads: true, agents: true, music: true)
+                        == [.downloads],
+                     "a paused or finished timer keeps its status mark beside music or agents")
+        suite.expect(NotchSupport.compactCompanions(timer: false, running: true, downloads: true, agents: true, music: true).isEmpty,
+                     "other activities need both wings and cannot be combined")
         let screen = CGRect(x: 0, y: 0, width: 1470, height: 956)
         for barHeight: CGFloat in [16, 22, 24, 32, 40, 64] {
             for notched in [false, true] {
@@ -563,6 +551,15 @@ enum NotchActivityTests {
                 }
             }
         }
+        let roomy = NotchGeometry(screen: screen, safeAreaTop: 32, cameraWidth: 185, layout: .spacious,
+                                  compactSideRoom: 300)
+        suite.expect(roomy.compactTimerGeometry(showsDownloads: false, wing: 30).compactActivityWingWidth == 44
+                        && roomy.compactTimerGeometry(showsDownloads: false, wing: 30).compactActivitySize.width == 185 + 88,
+                     "a short reading beside the cover narrows the timer's wings, leaving no empty band at the ends")
+        suite.expect(roomy.compactTimerGeometry(showsDownloads: false, wing: 51.2).compactActivityWingWidth == 52
+                        && roomy.compactTimerGeometry(showsDownloads: false, wing: 300).compactActivityWingWidth == 64
+                        && roomy.compactTimerGeometry(showsDownloads: true, wing: 30).compactActivityWingWidth == 80,
+                     "timer wings take what the reading needs up to their old width; a download keeps its own")
     }
 
     /// Compact strips measure their margins from the silhouette rather than
@@ -768,12 +765,15 @@ enum NotchActivityTests {
         for (key, value) in Defaults.registeredDefaults where key.hasPrefix("notch") { defaults.set(value, forKey: key) }
         for (key, value) in AppFeature.availabilityDefaults { defaults.set(value, forKey: key) }
         defaults.set(true, forKey: DefaultsKey.notchEnabled)
-        suite.expect(NotchTimerSupport.isEnabled(in: defaults) && !NotchCameraSupport.isEnabled(in: defaults)
-               && !NotchAccessorySupport.isEnabled(in: defaults), "on-demand timer is available by default while camera and accessory monitoring remain opt-in")
+        suite.expect(NotchTimerSupport.isEnabled(in: defaults) && NotchCameraSupport.isEnabled(in: defaults)
+               && NotchAccessorySupport.isEnabled(in: defaults), "installed timer, camera and accessory activity start enabled")
         let preferenceKeys = [DefaultsKey.notchTimerEnabled, DefaultsKey.notchCameraEnabled, DefaultsKey.notchAccessoriesEnabled]
+        for key in preferenceKeys { defaults.set(false, forKey: key) }
+        suite.expect(!NotchTimerSupport.isEnabled(in: defaults) && !NotchCameraSupport.isEnabled(in: defaults)
+               && !NotchAccessorySupport.isEnabled(in: defaults), "timer, camera and accessory activity can be turned off")
         for key in preferenceKeys { defaults.set(true, forKey: key) }
         suite.expect(NotchTimerSupport.isEnabled(in: defaults) && NotchCameraSupport.isEnabled(in: defaults)
-               && NotchAccessorySupport.isEnabled(in: defaults), "each explicit opt-in enables its activity")
+               && NotchAccessorySupport.isEnabled(in: defaults), "turning them back on restores their activity")
         suite.expect(NotchCameraSupport.canPresent(expanded: true, selected: .camera, appPanel: false,
             captureControls: false, in: defaults), "the mirror can start only on its selected, expanded surface")
         suite.expect(!NotchCameraSupport.canPresent(expanded: false, selected: .camera, appPanel: false,
