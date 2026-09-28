@@ -1076,6 +1076,18 @@ enum NotchTests {
                      forKey: DefaultsKey.notchQuickAccessLayout)
         suite.expect(NotchSupport.pinned(in: defaults).modules == [.scratchpad] && NotchSupport.isPinned(.scratchpad, in: defaults),
                "a control button counts for its section too")
+        defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore, .control(.music)])),
+                     forKey: DefaultsKey.notchQuickAccessLayout)
+        suite.expect(NotchSupport.controls(in: defaults).contains(.music), "pinned music control keeps playback card")
+        defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore, .module(.scratchpad)])),
+                     forKey: DefaultsKey.notchQuickAccessLayout)
+        let savedHidden = defaults.string(forKey: DefaultsKey.notchHiddenModules)
+        defaults.set("scratchpad", forKey: DefaultsKey.notchHiddenModules)
+        suite.expect(!NotchSupport.isPinned(.scratchpad, in: defaults), "hidden scratchpad page no longer hides its tile")
+        defaults.set(savedHidden, forKey: DefaultsKey.notchHiddenModules)
+        defaults.set(false, forKey: DefaultsKey.notchScratchpad)
+        suite.expect(!NotchSupport.isPinned(.scratchpad, in: defaults), "routing off: section button is a different destination")
+        defaults.removeObject(forKey: DefaultsKey.notchScratchpad)
         defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore])),
                      forKey: DefaultsKey.notchQuickAccessLayout)
         defaults.set(false, forKey: DefaultsKey.notchTimerEnabled)
