@@ -1053,8 +1053,8 @@ enum NotchTests {
                      "a saved island choice stays configured even if the master switch was never used")
 
         suite.expect(!NotchSupport.isEnabled(in: defaults), "notch is opt-in")
-        suite.expect(NotchSupport.controls(in: defaults) == [.volume, .brightness, .music, .keepAwake, .calendar],
-               "home controls leave out shortcuts to sections pinned around the island but keep the music card")
+        suite.expect(NotchSupport.controls(in: defaults) == [.volume, .brightness, .music, .keepAwake, .timer, .calendar],
+               "home controls leave out shortcuts to pinned sections but keep live tiles like music and the timer")
         defaults.set(false, forKey: DefaultsKey.notchHidePinned)
         suite.expect(NotchSupport.controls(in: defaults) == [.volume, .brightness, .music, .mixer, .keepAwake, .timer, .calendar]
                && !NotchSupport.isPinned(.timer, in: defaults),
@@ -1071,6 +1071,10 @@ enum NotchTests {
         defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore, .control(.music)])),
                      forKey: DefaultsKey.notchQuickAccessLayout)
         suite.expect(NotchSupport.controls(in: defaults).contains(.music), "pinned music control keeps playback card")
+        defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore, .module(.calendar), .control(.timer)])),
+                     forKey: DefaultsKey.notchQuickAccessLayout)
+        suite.expect(NotchSupport.controls(in: defaults).contains(.timer) && NotchSupport.controls(in: defaults).contains(.calendar),
+               "pinned timer and calendar keep the running clock and next appointment tiles")
         defaults.set(try! JSONEncoder().encode(NotchQuickAccessConfiguration(side: .left, actions: [.explore, .module(.scratchpad)])),
                      forKey: DefaultsKey.notchQuickAccessLayout)
         let savedHidden = defaults.string(forKey: DefaultsKey.notchHiddenModules)
