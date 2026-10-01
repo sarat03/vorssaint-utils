@@ -181,6 +181,28 @@ enum ScreenshotSupport {
         pointerOnDisplay && !selectionInProgress && !capturePending
     }
 
+    static func fullScreenCaptureControlIsAvailable(selectedTool: ScreenCaptureTool?,
+                                                    standaloneScreenshot: Bool,
+                                                    requiresDraggedRegion: Bool,
+                                                    scrollingCaptureEnabled: Bool) -> Bool {
+        let isScreenshot = standaloneScreenshot || selectedTool == .screenshot
+        return isScreenshot && !requiresDraggedRegion && !scrollingCaptureEnabled
+    }
+
+    static func fullScreenCaptureControlIsVisible(isAvailable: Bool,
+                                                  pointerOnDisplay: Bool,
+                                                  selectionInProgress: Bool,
+                                                  capturePending: Bool) -> Bool {
+        isAvailable && pointerOnDisplay && !selectionInProgress && !capturePending
+    }
+
+    static func fullScreenCaptureControlTopInset(screenChromeHeight: CGFloat,
+                                                 notchControlsHeight: CGFloat?) -> CGFloat {
+        let chrome = screenChromeHeight.isFinite ? max(0, screenChromeHeight) : 0
+        let controls = notchControlsHeight.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 0
+        return max(chrome, controls) + 12
+    }
+
     /// Whether the guide should advertise repeating the last capture region.
     /// The region is remembered for this app session only and belongs to one
     /// display, so the hint stays hidden until pressing the key would really

@@ -9,6 +9,7 @@ import CoreGraphics
 import Darwin
 import Foundation
 import ImageIO
+import SwiftUI
 import VMStatisticsCompat
 
 enum ScreenshotFeatureTests {
@@ -38,6 +39,91 @@ enum ScreenshotFeatureTests {
         }
 
         // MARK: Screenshot tool
+
+        let copyRecord = ScreenshotShareRecord(
+            id: String(repeating: "a", count: 32),
+            endpoint: URL(string: "https://example.com")!,
+            expiresAt: Date().addingTimeInterval(3_600), deleteToken: "test")
+        var linkEvents: [String] = []
+        let failedCopy = ScreenshotSharingSupport.copyLink(copyRecord, using: { url in
+            linkEvents.append(url.absoluteString)
+            return false
+        }, dismiss: { linkEvents.append("dismiss") })
+        suite.expect(!failedCopy && linkEvents == [copyRecord.url.absoluteString],
+                     "a failed link copy leaves the preview open for retry")
+        linkEvents.removeAll()
+        let successfulCopy = ScreenshotSharingSupport.copyLink(copyRecord, using: { url in
+            linkEvents.append(url.absoluteString)
+            return true
+        }, dismiss: { linkEvents.append("dismiss") })
+        suite.expect(successfulCopy && linkEvents == [copyRecord.url.absoluteString, "dismiss"],
+                     "a successful link copy dismisses the preview only after copying the URL")
+
+        let retryCaptureID = UUID()
+        var copyRetry = ScreenshotLinkCopyRetry()
+        copyRetry.remember(copyRecord, for: retryCaptureID)
+        suite.expect(copyRetry.record(for: retryCaptureID, availableRecords: [copyRecord]) == copyRecord,
+                     "a clipboard failure offers the same uploaded link for retry")
+        suite.expect(copyRetry.record(for: UUID(), availableRecords: [copyRecord]) == nil,
+                     "a new screenshot does not retry the previous screenshot's link")
+        suite.expect(copyRetry.record(for: retryCaptureID, availableRecords: []) == nil,
+                     "a revoked link cannot be copied by the upload shortcut")
+        suite.expect(copyRetry.record(for: retryCaptureID, availableRecords: [copyRecord],
+                                      now: copyRecord.expiresAt) == nil,
+                     "an expired link cannot be copied by the upload shortcut")
+        copyRetry.clear()
+        suite.expect(copyRetry.record(for: retryCaptureID, availableRecords: [copyRecord]) == nil,
+                     "successful copying clears the pending retry")
+
+        let uploadDefaultsName = "com.vorssaint.tests.screenshot-upload.\(UUID().uuidString)"
+        let uploadDefaults = UserDefaults(suiteName: uploadDefaultsName)!
+        defer { uploadDefaults.removePersistentDomain(forName: uploadDefaultsName) }
+        suite.expect(ScreenshotShareDuration.saved(in: uploadDefaults) == .oneHour,
+                     "an unset upload expiry defaults to one hour")
+        for duration in ScreenshotShareDuration.allCases {
+            uploadDefaults.set(duration.rawValue, forKey: DefaultsKey.screenshotUploadDuration)
+            suite.expect(ScreenshotShareDuration.saved(in: uploadDefaults) == duration,
+                         "the upload shortcut uses each supported saved expiry")
+            let url = ScreenshotSharingSupport.uploadURL(
+                endpoint: ScreenshotSharingSupport.productionEndpoint,
+                duration: .saved(in: uploadDefaults))!
+            suite.expect(URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first?.value == String(duration.rawValue),
+                         "the saved shortcut expiry reaches the upload request")
+        }
+        uploadDefaults.set(-1, forKey: DefaultsKey.screenshotUploadDuration)
+        suite.expect(ScreenshotShareDuration.saved(in: uploadDefaults) == .oneHour,
+                     "invalid restored expiry falls back to one hour")
+        for editEnabled in [false, true] {
+            for uploadEnabled in [false, true] {
+                for sharingEnabled in [false, true] {
+                    uploadDefaults.set(editEnabled, forKey: DefaultsKey.screenshotLastCaptureShortcutEnabled)
+                    uploadDefaults.set(uploadEnabled, forKey: DefaultsKey.screenshotUploadShortcutEnabled)
+                    uploadDefaults.set(sharingEnabled, forKey: DefaultsKey.screenshotSharingEnabled)
+                    let canUpload = uploadEnabled && sharingEnabled
+                    suite.expect(ScreenshotSharingSupport.uploadShortcutEnabled(in: uploadDefaults) == canUpload,
+                                 "uploads require both the shortcut and sharing to be enabled")
+                    suite.expect(ScreenshotSharingSupport.retainsLatestCapture(in: uploadDefaults)
+                        == (editEnabled || canUpload),
+                                 "either active latest-capture shortcut retains the screenshot")
+                    let roles = GlobalShortcutRole.activeRoles(
+                        isOn: { uploadDefaults.bool(forKey: $0) },
+                        isAvailable: { $0 == .screenshot })
+                    suite.expect(roles.contains(.screenshotUpload) == canUpload,
+                                 "shortcut conflict detection follows upload availability")
+                }
+            }
+        }
+        suite.expect(!GlobalShortcutRole.activeRoles(isOn: { _ in true },
+                                                     isAvailable: { _ in false })
+            .contains(.screenshotUpload), "unavailable screenshots disable the upload shortcut")
+        let uploadBackupKeys = SettingsBackupSupport.exportKeys()
+        suite.expect([DefaultsKey.screenshotUploadShortcutEnabled,
+                      DefaultsKey.screenshotUploadShortcut,
+                      DefaultsKey.screenshotUploadDuration].allSatisfy(uploadBackupKeys.contains),
+                     "upload shortcut and expiry settings travel in backups")
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.screenshotUploadShortcutEnabled]
+            as? Bool == false, "uploading by shortcut is opt-in")
 
         let ownScreenshotWindows: Set<CGWindowID> = [11, 12, 13]
         let protectedScreenshotWindows: Set<CGWindowID> = [12, 99]
@@ -796,7 +882,7 @@ enum ScreenshotFeatureTests {
         suite.expect(screenshotRouteBody.contains("guard case .shown(let dismissInterval) = ScreenshotSupport.quickPreviewPresentation(")
                 && screenshotRouteBody.contains("defaults: defaults)\n        else { return }\n        presentPreview(capture,")
                 && screenshotRouteBody.components(separatedBy: "presentPreview(").count == 2
-                && screenshotRouteBody.contains("dismissInterval: dismissInterval)"),
+                && screenshotRouteBody.contains("dismissInterval: dismissInterval,"),
                "route shows exactly the preview the shared decision asks for")
 
         // A gesture that ends with more than one release, like a drag made
@@ -995,6 +1081,76 @@ enum ScreenshotFeatureTests {
                                                             selectionInProgress: false,
                                                             capturePending: false),
                "the capture chooser disappears for the whole drag and while capture is pending")
+        suite.expect(ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+            selectedTool: nil,
+            standaloneScreenshot: true,
+            requiresDraggedRegion: false,
+            scrollingCaptureEnabled: false),
+               "standalone screenshot selection offers the full-screen action")
+        suite.expect(ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+            selectedTool: .screenshot,
+            standaloneScreenshot: false,
+            requiresDraggedRegion: false,
+            scrollingCaptureEnabled: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+                    selectedTool: .recording,
+                    standaloneScreenshot: false,
+                    requiresDraggedRegion: false,
+                    scrollingCaptureEnabled: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+                    selectedTool: .text,
+                    standaloneScreenshot: false,
+                    requiresDraggedRegion: false,
+                    scrollingCaptureEnabled: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+                    selectedTool: .color,
+                    standaloneScreenshot: false,
+                    requiresDraggedRegion: false,
+                    scrollingCaptureEnabled: false),
+               "the unified chooser offers full screen only for screenshots")
+        suite.expect(!ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+            selectedTool: .screenshot,
+            standaloneScreenshot: false,
+            requiresDraggedRegion: true,
+            scrollingCaptureEnabled: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsAvailable(
+                    selectedTool: .screenshot,
+                    standaloneScreenshot: false,
+                    requiresDraggedRegion: false,
+                    scrollingCaptureEnabled: true),
+               "region-only and scrolling capture modes do not offer a conflicting full-screen action")
+        suite.expect(ScreenshotSupport.fullScreenCaptureControlIsVisible(
+            isAvailable: true,
+            pointerOnDisplay: true,
+            selectionInProgress: false,
+            capturePending: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsVisible(
+                    isAvailable: true,
+                    pointerOnDisplay: true,
+                    selectionInProgress: true,
+                    capturePending: false)
+                && !ScreenshotSupport.fullScreenCaptureControlIsVisible(
+                    isAvailable: true,
+                    pointerOnDisplay: true,
+                    selectionInProgress: false,
+                    capturePending: true)
+                && !ScreenshotSupport.fullScreenCaptureControlIsVisible(
+                    isAvailable: true,
+                    pointerOnDisplay: false,
+                    selectionInProgress: false,
+                    capturePending: false),
+               "the full-screen action stays on the pointer display and disappears as soon as selection or capture starts")
+        suite.expect(ScreenshotSupport.fullScreenCaptureControlTopInset(
+            screenChromeHeight: 32,
+            notchControlsHeight: nil) == 44
+                && ScreenshotSupport.fullScreenCaptureControlTopInset(
+                    screenChromeHeight: 32,
+                    notchControlsHeight: 168) == 180,
+               "the full-screen action sits below screen chrome and any active notch capture controls")
+        let fullScreenClickHost = PassThroughHostingView(interactiveRootView: Text("Full screen"))
+        suite.expect(!fullScreenClickHost.passesThrough
+                && fullScreenClickHost.acceptsFirstMouse(for: nil),
+               "the interactive full-screen host receives its first click while Dynamic Island owns key focus")
         suite.expect(ScreenshotSupport.offersRepeatLastRegion(isPickingColor: false,
                                                         storedRegionDisplayIsAvailable: true),
                "the repeat hint is offered once a region is stored on a display still in the session")
@@ -1024,6 +1180,44 @@ enum ScreenshotFeatureTests {
         suite.expect(captureSelectionSource.contains("private var pointerIsInside = false")
                 && !captureSelectionSource.contains("|| bounds.contains(hoverPoint)"),
                "the capture loupe draws on only the display that owns the current pointer")
+        // The uploader tests run what these call. Here the calls themselves
+        // are checked with comments removed: a new capture starts the latest
+        // capture first, teardown invalidates pending uploads, and only a
+        // preview made from that new capture can withhold it on discard.
+        let screenshotServiceCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotService.swift",
+            encoding: .utf8)) ?? "").components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        func serviceBody(_ start: String) -> String {
+            screenshotServiceCode.components(separatedBy: start).dropFirst().first?
+                .components(separatedBy: "\n    }\n").first ?? ""
+        }
+        let routeStatements = serviceBody("    private func route(_ capture:")
+            .components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        suite.expect(serviceBody("    private func teardownSurfaces() {").contains("invalidateLatestCaptureUploads()")
+                && routeStatements.dropFirst().first == "beginLatestCapture(capture)",
+               "turning screenshots off invalidates pending shortcut uploads, and every capture starts as the latest one")
+        suite.expect(serviceBody("    func syncWithPreferences() {")
+                    .contains("enabled: ScreenshotSharingSupport.uploadShortcutEnabled(in: defaults),"),
+               "the upload shortcut is registered only while it and temporary links are both on")
+        suite.expect(serviceBody("    private func route(_ capture:").contains("latestCapture: latestCaptureID)")
+                && serviceBody("    func restorePreview(").contains("latestCapture: nil)")
+                && screenshotServiceCode.contains("self.discardLatestCapture(latestCapture)\n                    return [.discard]"),
+               "discarding the preview of the latest capture withholds it, while a preview reopened from history does not")
+        // In the island the menu arrow is hidden, so a click there must open
+        // the durations rather than publish at once.
+        let shareMenuCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotQuickPreviewController.swift",
+            encoding: .utf8)) ?? "").components(separatedBy: "@ViewBuilder private var shareMenu: some View {")
+            .dropFirst().first?.components(separatedBy: "private var shareDurations").first ?? ""
+        let embeddedShareMenu = shareMenuCode.components(separatedBy: "} else {").first ?? ""
+        let floatingShareMenu = shareMenuCode.components(separatedBy: "} else {").dropFirst().first ?? ""
+        suite.expect(embeddedShareMenu.contains("Menu { shareDurations } label: { shareMenuLabel },")
+                && !embeddedShareMenu.contains("primaryAction")
+                && floatingShareMenu.contains("primaryAction: {\n                share(.saved())"),
+               "the island's link button opens the durations on a click, while the floating preview keeps its split button")
         let captureServiceSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenCaptureService.swift",
             encoding: .utf8)) ?? ""
@@ -2884,6 +3078,7 @@ enum ScreenshotFeatureTests {
         // Muting every microphone, not just the one the Mac is set to: an app
         // pointed at a device of its own has to go silent too.
         suite.expect(MicMuteSupport.isOwnDevice(name: "Vorssaint Mixer")
+                && MicMuteSupport.isOwnDevice(name: "Vorssaint AirPlay")
                 && MicMuteSupport.isOwnDevice(name: "Vorssaint Island Levels")
                 && MicMuteSupport.isOwnDevice(name: "Vorssaint Recorder")
                 && !MicMuteSupport.isOwnDevice(name: "MacBook Air Microphone"),

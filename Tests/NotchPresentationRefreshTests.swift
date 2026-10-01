@@ -25,6 +25,7 @@ enum NotchPresentationRefreshContract {
         @Published var selectedTool: Tool = .screenshot
         var hasFocusedControl = false
         var onSelectionProgressChange: ((Bool) -> Void)?
+        var onCaptureControlsSurfaceChange: ((CGRect, CGFloat) -> Void)?
     }
     enum UserDefaults {
         static var standard = Preferences()
