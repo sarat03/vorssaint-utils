@@ -946,6 +946,14 @@ enum NotchAgentTests {
                         && AgentClaudeAppUsage.limits(from: samples, now: now, sessionStart: at("2026-09-23T13:40:00Z"))?
                         .windows.first?.resetsAt == at("2026-09-23T19:05:00Z"),
                      "Claude Code's first request places the session only inside the gap the readings leave")
+        let requests = [record(.claude, at("2026-09-23T13:55:00Z"), cost: 1), record(.claude, at("2026-09-23T18:58:00Z"), cost: 1)]
+        let placed = AgentClaudeAppUsage.sessionStart(requests, samples: samples)
+        let ended = at("2026-09-23T19:00:00Z")
+        suite.expect(placed == at("2026-09-23T13:55:00Z")
+                        && AgentClaudeAppUsage.limits(from: samples, now: at("2026-09-23T18:50:00Z"), sessionStart: placed)?
+                        .windows.first?.resetsAt == at("2026-09-23T18:55:00Z")
+                        && AgentClaudeAppUsage.limits(from: samples, now: ended, sessionStart: placed)?.windows.map(\.kind) == [.weekly],
+                     "the session the newest reading saw keeps its renewal after it ends, even once a new one began")
         let renewed = AgentClaudeAppUsage.samples(from: history([
             ("2026-09-16T19:50:00Z", "o", ["fh": 10, "sd": 95]), ("2026-09-16T20:05:00Z", "o", ["fh": 0, "sd": 1]),
             ("2026-09-23T14:00:00Z", "x", ["fh": 90, "sd": 2]), ("2026-09-23T14:10:00Z", "x", ["fh": 0, "sd": 99]),
