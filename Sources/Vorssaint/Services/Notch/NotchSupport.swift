@@ -977,12 +977,11 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
 
     /// The section a shortcut tile only jumps to, so a section already pinned
     /// around the island does not show up again as a tile. The music card,
-    /// volume and brightness render their own view here, so they always stay.
+    /// volume, brightness, the timer's clock and the next appointment show
+    /// live state here that a pinned icon does not, so they always stay.
     var module: NotchModule? {
         switch self {
         case .mixer: return .mixer
-        case .timer: return .timer
-        case .calendar: return .calendar
         case .scratchpad: return .scratchpad
         default: return nil
         }
@@ -1500,12 +1499,12 @@ enum NotchSupport {
         var controls: Set<NotchControlItem> = []
 
         func contains(_ item: NotchControlItem) -> Bool {
-            guard ![.music, .volume, .brightness].contains(item) else { return false }
+            guard ![.music, .volume, .brightness, .timer, .calendar].contains(item) else { return false }
             return controls.contains(item) || item.module.map(modules.contains) ?? false
         }
     }
 
-    // ponytail: only the decode is cached, keyed on the saved layout bytes;
+    // Only the decode is cached, keyed on the saved layout bytes;
     // visibility and routing are read fresh so preference changes apply.
     private static var pinnedCache: (layout: Data, actions: [NotchQuickAction])?
 
