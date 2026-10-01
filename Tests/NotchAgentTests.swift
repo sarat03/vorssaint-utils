@@ -715,6 +715,37 @@ enum NotchAgentTests {
                         && NotchAgentSupport.stripReading(limited, readout: .limit, display: .used, now: now) == AgentFormat.percent(0.79)
                         && NotchAgentSupport.stripReading(short, readout: .limit, display: .remaining, now: now) == "12:34",
                      "a limit reads as left or used, and falls back to the time while none is known")
+        let both = AgentLimits(provider: .claude, windows: [
+            AgentLimitWindow(id: "s", kind: .session, minutes: 300, scope: nil, usedPercent: 22,
+                             resetsAt: now.addingTimeInterval(3_600)),
+            window,
+            AgentLimitWindow(id: "o", kind: .weekly, minutes: 10_080, scope: "Opus", usedPercent: 95,
+                             resetsAt: now.addingTimeInterval(86_400))], observedAt: now, source: .claudeApp)
+        let working = snapshot([session(.claude, startedAgo: 754)], limits: [.claude: both])
+        suite.expect(NotchAgentSupport.stripReading(working, readout: .limit, display: .used, now: now) == AgentFormat.percent(0.95)
+                        && NotchAgentSupport.stripReading(working, readout: .limit, display: .used, focus: .session, now: now)
+                            == AgentFormat.percent(0.22)
+                        && NotchAgentSupport.stripReading(working, readout: .limit, display: .used, focus: .weekly, now: now)
+                            == AgentFormat.percent(0.79),
+                     "the closed island shows the chosen window, and a model's own allowance never stands for the week")
+        suite.expect(NotchAgentSupport.stripReading(working, readout: .limit, display: .used, focus: .session,
+                                                    now: now.addingTimeInterval(3_601)) == AgentFormat.percent(0),
+                     "a chosen session that renewed reads as unspent")
+        suite.expect(NotchAgentSupport.stripReading(limited, readout: .limit, display: .used, focus: .session, now: now)
+                        == AgentFormat.percent(0.79),
+                     "without the chosen window the closed island shows the one closest to running out")
+        let codexWeek = AgentLimits(provider: .codex, windows: [
+            AgentLimitWindow(id: "cw", kind: .weekly, minutes: 10_080, scope: nil, usedPercent: 70,
+                             resetsAt: now.addingTimeInterval(86_400))], observedAt: now, source: .sessionLog)
+        let resting = snapshot([], limits: [.claude: both, .codex: codexWeek])
+        suite.expect(NotchAgentSupport.restingLimit(resting, focus: .session, now: now)
+                        .map { $0.provider == .claude && $0.window.usedPercent == 22 } == true,
+                     "the resting island compares only the chosen windows while any account reports one")
+        suite.expect(NotchAgentSupport.restingLimit(snapshot([], limits: [.codex: codexWeek]), focus: .session, now: now)
+                        .map { $0.provider == .codex && $0.window.usedPercent == 70 } == true
+                        && NotchAgentSupport.restingLimit(resting, focus: .mostUsed, now: now)
+                            .map { $0.provider == .claude && $0.window.usedPercent == 95 } == true,
+                     "the resting island falls back to the most used window only when no account reports the chosen one")
         let expiredAt = now.addingTimeInterval(86_401)
         suite.expect(NotchAgentSupport.stripReading(limited, readout: .limit, display: .remaining, now: expiredAt)
                         == AgentFormat.percent(1),
@@ -1037,6 +1068,10 @@ enum NotchAgentTests {
                      "the saved order ignores unknown and repeated cards and appends new ones")
         defaults.set(false, forKey: DefaultsKey.notchAgentsCodex)
         suite.expect(NotchAgentSupport.providers(in: defaults) == [.claude], "an agent can be left out")
+        defaults.set("unknown", forKey: DefaultsKey.notchAgentsLimitFocus)
+        suite.expect(NotchAgentSupport.limitFocus(in: defaults) == .mostUsed, "an unknown limit choice shows the most used")
+        defaults.set(NotchAgentLimitFocus.weekly.rawValue, forKey: DefaultsKey.notchAgentsLimitFocus)
+        suite.expect(NotchAgentSupport.limitFocus(in: defaults) == .weekly, "the chosen limit is kept")
         defaults.set(false, forKey: DefaultsKey.notchAgentsFinishAlert)
         defaults.set(95.0, forKey: DefaultsKey.notchAgentsLimitThreshold)
         defaults.set(-4.0, forKey: DefaultsKey.notchAgentsDailyBudget)
@@ -1046,7 +1081,7 @@ enum NotchAgentTests {
 
         let keys = [DefaultsKey.notchAgentsEnabled, DefaultsKey.notchAgentsClaude, DefaultsKey.notchAgentsCodex,
                     DefaultsKey.notchAgentsCardOrder, DefaultsKey.notchAgentsHiddenCards, DefaultsKey.notchAgentsPeriod,
-                    DefaultsKey.notchAgentsLimitDisplay, DefaultsKey.notchAgentsLiveActivity, DefaultsKey.notchAgentsReadout,
+                    DefaultsKey.notchAgentsLimitDisplay, DefaultsKey.notchAgentsLimitFocus, DefaultsKey.notchAgentsLiveActivity, DefaultsKey.notchAgentsReadout,
                     DefaultsKey.notchAgentsFinishAlert, DefaultsKey.notchAgentsFinishMinimum, DefaultsKey.notchAgentsLimitAlert,
                     DefaultsKey.notchAgentsLimitThreshold, DefaultsKey.notchAgentsDailyBudget, DefaultsKey.notchAgentsPriceUpdates]
         suite.expect(keys.allSatisfy { Defaults.registeredDefaults[$0] != nil } && SettingsBackupSupport.exportKeys().isSuperset(of: keys)

@@ -13,6 +13,7 @@ struct NotchAgentsSettingsControls: View {
     @AppStorage(DefaultsKey.notchAgentsCardOrder) private var cardOrder = ""
     @AppStorage(DefaultsKey.notchAgentsHiddenCards) private var hiddenCards = ""
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var limitDisplay = NotchAgentLimitDisplay.remaining.rawValue
+    @AppStorage(DefaultsKey.notchAgentsLimitFocus) private var limitFocus = NotchAgentLimitFocus.mostUsed.rawValue
     @AppStorage(DefaultsKey.notchAgentsLiveActivity) private var liveActivity = true
     @AppStorage(DefaultsKey.notchAgentsReadout) private var readout = NotchAgentReadout.elapsed.rawValue
     @AppStorage(DefaultsKey.notchAgentsFinishAlert) private var finishAlert = true
@@ -71,6 +72,13 @@ struct NotchAgentsSettingsControls: View {
                 Text(text.remaining).tag(NotchAgentLimitDisplay.remaining.rawValue)
                 Text(text.used).tag(NotchAgentLimitDisplay.used.rawValue)
             }
+            // The resting island shows this allowance whatever the live
+            // reading, and the live reading uses it when it shows a limit.
+            SettingsMenuRow(symbol: "rectangle.topthird.inset.filled", title: text.limitFocus, selection: $limitFocus) {
+                ForEach(NotchAgentLimitFocus.allCases) { focus in
+                    Text(text.limitFocus(focus)).tag(focus.rawValue)
+                }
+            }
 
             Divider()
             Text(text.liveTitle).font(.subheadline.weight(.medium))
@@ -84,6 +92,7 @@ struct NotchAgentsSettingsControls: View {
                 .padding(.leading, settingsRowTextInset)
                 NotchAgentStripSample(readout: NotchAgentReadout(rawValue: readout) ?? .elapsed,
                                       display: NotchAgentLimitDisplay(rawValue: limitDisplay) ?? .remaining,
+                                      focus: NotchAgentLimitFocus(rawValue: limitFocus) ?? .mostUsed,
                                       provider: claude || !codex ? .claude : .codex)
                     .padding(.leading, settingsRowTextInset)
             }
@@ -140,7 +149,7 @@ struct NotchAgentsSettingsControls: View {
         // Cards and agents set the page's height, and the live reading the
         // closed island's width, which the island follows.
         .onChange(of: [cardOrder, hiddenCards, String(claude), String(codex),
-                       String(liveActivity), readout, limitDisplay]) { _, _ in
+                       String(liveActivity), readout, limitDisplay, limitFocus]) { _, _ in
             NotchService.shared.syncWithPreferences()
         }
     }
@@ -255,6 +264,7 @@ extension NotchAgentCard: PanelOrderItem {}
 private struct NotchAgentStripSample: View {
     let readout: NotchAgentReadout
     let display: NotchAgentLimitDisplay
+    let focus: NotchAgentLimitFocus
     let provider: AgentProvider
     @ObservedObject private var usage = AgentUsageService.shared
     private static let camera: CGFloat = 64
@@ -289,7 +299,7 @@ private struct NotchAgentStripSample: View {
                                               tokens: AgentTokens(input: 1_180_000, cacheWrite: 0, cacheRead: 0, output: 20_000),
                                               cost: 4.56)]
         }
-        return NotchAgentSupport.stripReading(snapshot, readout: readout, display: display, now: now)
+        return NotchAgentSupport.stripReading(snapshot, readout: readout, display: display, focus: focus, now: now)
     }
 }
 
