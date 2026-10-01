@@ -61,9 +61,9 @@ enum AgentClaudeAppUsage {
     }
 
     /// The latest reading as limit windows. The file keeps percentages, not
-    /// renewal times: a session renews five hours after the hour its use
-    /// began, which the history brackets and Claude Code's own first request
-    /// can narrow, and a week renews every seven days at the moment of the
+    /// renewal times: a session renews five hours after its first request,
+    /// which the history brackets and Claude Code's own first request can
+    /// narrow, and a week renews every seven days at the moment of the
     /// last drop the history saw.
     static func limits(from samples: [Sample], now: Date, sessionStart: Date? = nil,
                        organization: String? = nil) -> AgentLimits? {
@@ -107,7 +107,7 @@ enum AgentClaudeAppUsage {
         let latest = history[first].date
         let earliest = first > 0 ? history[first - 1].date : latest.addingTimeInterval(-length)
         let began = start.flatMap { $0 > earliest && $0 <= latest ? $0 : nil } ?? latest
-        return hour(of: began).addingTimeInterval(length)
+        return began.addingTimeInterval(length)
     }
 
     /// The first renewal after `reading`, from the last drop the history saw.

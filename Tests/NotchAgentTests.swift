@@ -478,7 +478,7 @@ enum NotchAgentTests {
         let records = [
             record(.claude, AgentTimestamp.parse("2026-09-22T10:12:00Z")!, cost: 2),
             record(.claude, AgentTimestamp.parse("2026-09-22T11:30:00Z")!, cost: 5, model: "claude-sonnet-5"),
-            record(.claude, AgentTimestamp.parse("2026-09-22T15:05:00Z")!, cost: 1),
+            record(.claude, AgentTimestamp.parse("2026-09-22T15:20:00Z")!, cost: 1),
             record(.codex, AgentTimestamp.parse("2026-09-22T16:30:00Z")!, cost: 4, model: "gpt-6-astra", project: "web"),
             record(.codex, AgentTimestamp.parse("2026-09-18T09:00:00Z")!, cost: 10, model: "gpt-6-astra", project: "web"),
             record(.claude, AgentTimestamp.parse("2026-09-01T09:00:00Z")!, cost: 100),
@@ -497,10 +497,10 @@ enum NotchAgentTests {
         suite.expect(snapshot.usage(.today).models.map(\.name) == ["Sonnet 5", "GPT-6 Astra", "Opus 5"]
                         && snapshot.usage(.today).projects.map(\.name) == ["app", "web"],
                      "models and projects are ranked by what they cost")
-        suite.expect(snapshot.claudeBlock == AgentBlock(start: AgentTimestamp.parse("2026-09-22T15:00:00Z")!,
-                                                        end: AgentTimestamp.parse("2026-09-22T20:00:00Z")!,
+        suite.expect(snapshot.claudeBlock == AgentBlock(start: AgentTimestamp.parse("2026-09-22T15:20:00Z")!,
+                                                        end: AgentTimestamp.parse("2026-09-22T20:20:00Z")!,
                                                         totals: { var totals = AgentTotals(); totals.add(records[2]); return totals }()),
-                     "Claude's window starts on the hour of the first request after the last one ended")
+                     "Claude's window starts at the first request after the last one ended")
         suite.expect(snapshot.burnRate[.codex]?.cost == 8 && snapshot.burnRate[.claude] == nil,
                      "the last half hour is scaled to an hour")
         suite.expect(snapshot.lastActivity[.codex] == records[3].date && snapshot.seen == [.claude, .codex],
@@ -515,11 +515,11 @@ enum NotchAgentTests {
                                                     providers: [.claude], now: now, calendar: calendar)
         suite.expect(claudeOnly.usage(.today).total.cost == 8 && !claudeOnly.seen.contains(.codex),
                      "an agent turned off leaves every total")
-        let late = AgentUsageSummary.currentBlock(Array(records.prefix(3)), now: AgentTimestamp.parse("2026-09-22T20:00:00Z")!)
+        let late = AgentUsageSummary.currentBlock(Array(records.prefix(3)), now: AgentTimestamp.parse("2026-09-22T20:20:00Z")!)
         suite.expect(late == nil, "a window that has ended is no longer current")
 
         // Steady work from morning to evening: the chain of windows starts
-        // with the day's first request, on the hour in UTC even where the
+        // with the day's first request, at its own minute even where the
         // clock sits half an hour off.
         let morning = AgentTimestamp.parse("2026-09-22T06:10:00Z")!
         let steps: [Int] = Array(0...34)
@@ -531,9 +531,9 @@ enum NotchAgentTests {
         let evening = AgentTimestamp.parse("2026-09-22T17:30:00Z")!
         let steadyDay = AgentUsageSummary.snapshot(records: steady, limits: [:], live: [], plans: [:], providers: [.claude],
                                                    now: evening, calendar: kolkata)
-        suite.expect(steadyDay.claudeBlock?.start == AgentTimestamp.parse("2026-09-22T16:00:00Z")
-                        && steadyDay.claudeBlock?.end == AgentTimestamp.parse("2026-09-22T21:00:00Z"),
-                     "a day of steady work keeps the window its first request placed, on the UTC hour")
+        suite.expect(steadyDay.claudeBlock?.start == AgentTimestamp.parse("2026-09-22T16:10:00Z")
+                        && steadyDay.claudeBlock?.end == AgentTimestamp.parse("2026-09-22T21:10:00Z"),
+                     "a day of steady work keeps the window its first request placed, to the minute")
 
         // A snapshot is made again only when time alone would change it.
         let noon = AgentTimestamp.parse("2026-09-22T12:00:00Z")!
@@ -936,12 +936,12 @@ enum NotchAgentTests {
                         && reading?.windows.map(\.kind) == [.session, .weekly]
                         && reading?.windows.map(\.usedPercent) == [6, 42] && reading?.windows.last?.resetsAt == nil,
                      "the latest reading gives the session and the week, and a week with no renewal seen has no date")
-        suite.expect(reading?.windows.first?.resetsAt == at("2026-09-23T19:00:00Z"),
-                     "a session renews five hours after the hour its first reading above zero fell in")
+        suite.expect(reading?.windows.first?.resetsAt == at("2026-09-23T19:05:00Z"),
+                     "a session renews five hours after its first reading above zero")
         suite.expect(AgentClaudeAppUsage.limits(from: samples, now: now, sessionStart: at("2026-09-23T13:55:00Z"))?
-                        .windows.first?.resetsAt == at("2026-09-23T18:00:00Z")
+                        .windows.first?.resetsAt == at("2026-09-23T18:55:00Z")
                         && AgentClaudeAppUsage.limits(from: samples, now: now, sessionStart: at("2026-09-23T13:40:00Z"))?
-                        .windows.first?.resetsAt == at("2026-09-23T19:00:00Z"),
+                        .windows.first?.resetsAt == at("2026-09-23T19:05:00Z"),
                      "Claude Code's first request places the session only inside the gap the readings leave")
         let renewed = AgentClaudeAppUsage.samples(from: history([
             ("2026-09-16T19:50:00Z", "o", ["fh": 10, "sd": 95]), ("2026-09-16T20:05:00Z", "o", ["fh": 0, "sd": 1]),
@@ -972,7 +972,7 @@ enum NotchAgentTests {
             ("2026-09-23T15:05:00Z", "o", ["fh": 4, "sd": 21]), ("2026-09-23T15:20:00Z", "o", ["fh": 12, "sd": 22])])) ?? []
         let working = AgentClaudeAppUsage.limits(from: continuous, now: at("2026-09-23T15:25:00Z"))
         suite.expect(working?.windows.first?.kind == .session
-                        && working?.windows.first?.resetsAt == at("2026-09-23T20:00:00Z"),
+                        && working?.windows.first?.resetsAt == at("2026-09-23T20:05:00Z"),
                      "a session that renews during continuous use starts again at the drop")
         let first = AgentClaudeAppUsage.samples(from: history([("2026-09-23T14:20:00Z", nil, ["fh": 5, "sd": 20])], version: 1))
         suite.expect(first?.first?.used == ["fh": 5, "sd": 20] && AgentClaudeAppUsage.samples(from: history([], version: 3)) == nil
