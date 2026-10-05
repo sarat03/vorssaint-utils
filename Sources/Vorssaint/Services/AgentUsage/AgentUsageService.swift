@@ -324,7 +324,7 @@ final class AgentUsageService: ObservableObject {
             let read = self.pollOpenLogs(within: Self.pollWindow)
             var stopped = self.store.closeSettledTurns(now: Date())
             // A tool that runs on the Mac can log a result meanwhile.
-            if self.offline, self.store.closeOfflineTurns() { stopped = true }
+            if self.offline, self.store.closeOfflineTurns(keeping: self.runningCommands) { stopped = true }
             // After the logs, so a turn its last lines ended ends as usual.
             guard self.closeEndedTurns(self.watchedRoots) || read || stopped else { return }
             self.checkLimits()
@@ -374,10 +374,15 @@ final class AgentUsageService: ObservableObject {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self, self.readerSession >= 0 else { return }
             self.offline = path.status != .satisfied
-            if self.offline, self.store.closeOfflineTurns() { self.schedulePublish() }
+            if self.offline, self.store.closeOfflineTurns(keeping: self.runningCommands) { self.schedulePublish() }
         }
         monitor.start(queue: queue)
         network = monitor
+    }
+
+    /// The logs whose turn waits on a shell command. Runs on `queue`.
+    private var runningCommands: Set<String> {
+        Set(cursors.filter { !$0.value.state.runningCommands.isEmpty }.keys)
     }
 
     /// Ends the Claude turns whose process is gone. True when one was showing.

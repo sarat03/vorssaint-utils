@@ -334,13 +334,17 @@ final class AgentUsageStore {
     /// An agent that answers from a server cannot work while the Mac is
     /// offline, though it writes nothing while it retries: its turns end
     /// without a notice, quiet ones too, so a retry that gets through opens
-    /// a turn of its own. OpenCode can run a model on the Mac itself. True
-    /// when a turn was showing.
+    /// a turn of its own. OpenCode can run a model on the Mac itself, and a
+    /// turn in `running` waits on a command that runs here. True when a turn
+    /// was showing.
     @discardableResult
-    func closeOfflineTurns() -> Bool {
-        let closed = turns.values.contains { $0.provider != .opencode }
-        turns = turns.filter { $0.value.provider == .opencode }
-        waiting = waiting.filter { $0.value.provider == .opencode }
+    func closeOfflineTurns(keeping running: Set<String> = []) -> Bool {
+        func kept(_ entry: (key: String, value: AgentLiveSession)) -> Bool {
+            entry.value.provider == .opencode || running.contains(entry.key)
+        }
+        let closed = turns.contains { !kept($0) }
+        turns = turns.filter(kept)
+        waiting = waiting.filter(kept)
         settled = settled.filter { turns[$0.key] != nil || waiting[$0.key] != nil }
         return closed
     }

@@ -301,6 +301,26 @@ enum NotchAgentTests {
         _ = feed(claudeAssistant(id: "msg_3", request: "req_3", stop: "tool_use", time: "2026-09-21T23:44:30.000Z"))
         suite.expect(store.live.first { $0.provider == .claude }?.started == AgentTimestamp.parse("2026-09-21T23:44:30.000Z"),
                      "a quiet turn ends offline too, so a later retry does not take it up again")
+
+        func call(_ tool: String, _ id: String) -> Data {
+            line(#"{"type":"assistant","timestamp":"2026-09-21T23:44:40.000Z","sessionId":"s1","message":{"id":"msg_\#(id)","model":"<synthetic>","stop_reason":"tool_use","content":[{"type":"tool_use","id":"\#(id)","name":"\#(tool)","input":{}}]}}"#)
+        }
+        func result(_ id: String) -> Data {
+            line(#"{"type":"user","sessionId":"s1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"\#(id)","content":"ok"}]}}"#)
+        }
+        _ = feed(call("WebFetch", "toolu_web"))
+        _ = feed(call("Bash", "toolu_sh"))
+        suite.expect(state.runningCommands == ["toolu_sh"], "only a shell command counts as work on the Mac")
+        suite.expect(!store.closeOfflineTurns(keeping: ["main"]) && store.live.contains { $0.provider == .claude },
+                     "a turn waiting on a shell command keeps working offline")
+        _ = feed(result("toolu_web"))
+        suite.expect(state.runningCommands == ["toolu_sh"], "another tool's result leaves the command running")
+        _ = feed(result("toolu_sh"))
+        suite.expect(state.runningCommands.isEmpty, "the command's result means the next step needs the network")
+        _ = feed(call("Bash", "toolu_left"))
+        _ = feed(line(#"{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}"#))
+        _ = feed(claudeUser(time: "2026-09-21T23:44:50.000Z"))
+        suite.expect(state.runningCommands.isEmpty, "a new prompt forgets a command the last turn left")
     }
 
     private static func claudeTurns(_ suite: TestSuite) {
