@@ -16,6 +16,7 @@ enum NotchAgentTests {
         pricing(suite)
         claudeParsing(suite)
         claudeTurns(suite)
+        offlineTurns(suite)
         codexParsing(suite)
         openCodeParsing(suite)
         CopilotAgentTests.run(suite)
@@ -276,6 +277,30 @@ enum NotchAgentTests {
                     file: "a", provider: .claude, tracksTurns: false, modified: now)
         suite.expect(store.records.count == 1 && store.records.first?.tokens.output == 400,
                      "dropping old history keeps later lookups consistent")
+    }
+
+    private static func offlineTurns(_ suite: TestSuite) {
+        let now = AgentTimestamp.parse("2026-09-21T23:45:00.000Z")!
+        var state = AgentLogState()
+        let store = AgentUsageStore()
+        store.reportsTransitions = true
+        func feed(_ data: Data) -> [AgentUsageEvent] {
+            store.apply(AgentLogParser.parseClaude(data, state: &state, now: now), file: "main", provider: .claude,
+                        tracksTurns: true, modified: now, now: now)
+        }
+        _ = feed(claudeUser())
+        _ = feed(claudeAssistant(stop: "tool_use"))
+        _ = store.apply([.turnBegan(now)], file: "db#s1", provider: .opencode, tracksTurns: true, modified: now, now: now)
+        suite.expect(store.closeOfflineTurns() && store.live.map(\.provider) == [.opencode],
+                     "going offline ends a server agent's turn, not one a local model may run")
+        suite.expect(feed(claudeAssistant(id: "msg_2", request: "req_2", stop: "tool_use", time: "2026-09-21T23:44:00.000Z")).isEmpty
+                        && store.live.first { $0.provider == .claude }?.started == AgentTimestamp.parse("2026-09-21T23:44:00.000Z"),
+                     "a retry that gets through opens a turn of its own")
+        store.closeIdleTurns(now: now, after: 0)
+        store.closeOfflineTurns()
+        _ = feed(claudeAssistant(id: "msg_3", request: "req_3", stop: "tool_use", time: "2026-09-21T23:44:30.000Z"))
+        suite.expect(store.live.first { $0.provider == .claude }?.started == AgentTimestamp.parse("2026-09-21T23:44:30.000Z"),
+                     "a quiet turn ends offline too, so a later retry does not take it up again")
     }
 
     private static func claudeTurns(_ suite: TestSuite) {

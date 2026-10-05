@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import Network
 
 /// Reads Claude Code, Codex and GitHub Copilot usage from local session logs, and
 /// OpenCode usage from its database, while the AI section is on, along with
@@ -74,6 +75,8 @@ final class AgentUsageService: ObservableObject {
     private var watcher: AgentLogWatcher?
     private var watchedRoots: [AgentLogRoot] = []
     private var poller: DispatchSourceTimer?
+    private var network: NWPathMonitor?
+    private var offline = false
     private var publishScheduled = false
     /// The last snapshot handed over, to tell when time alone changes it.
     private var published = AgentUsageSnapshot()
@@ -170,6 +173,9 @@ final class AgentUsageService: ObservableObject {
             watcher?.stop()
             watcher = nil
             watchedRoots = []
+            network?.cancel()
+            network = nil
+            offline = false
             store = AgentUsageStore()
             cursors.removeAll()
             published = AgentUsageSnapshot()
@@ -262,6 +268,7 @@ final class AgentUsageService: ObservableObject {
             }
             watch(roots)
             startPolling()
+            watchNetwork()
             publish()
             saveProgress()
         }
@@ -315,7 +322,9 @@ final class AgentUsageService: ObservableObject {
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let read = self.pollOpenLogs(within: Self.pollWindow)
-            let stopped = self.store.closeSettledTurns(now: Date())
+            var stopped = self.store.closeSettledTurns(now: Date())
+            // A tool that runs on the Mac can log a result meanwhile.
+            if self.offline, self.store.closeOfflineTurns() { stopped = true }
             // After the logs, so a turn its last lines ended ends as usual.
             guard self.closeEndedTurns(self.watchedRoots) || read || stopped else { return }
             self.checkLimits()
@@ -354,6 +363,21 @@ final class AgentUsageService: ObservableObject {
             if read(path, provider: cursor.provider) { changed = true }
         }
         return changed
+    }
+
+    /// Claude Code retries for minutes without a word while the Mac is
+    /// offline, then gives up; until it does, its turn would count on.
+    /// Runs on `queue`.
+    private func watchNetwork() {
+        guard network == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self, self.readerSession >= 0 else { return }
+            self.offline = path.status != .satisfied
+            if self.offline, self.store.closeOfflineTurns() { self.schedulePublish() }
+        }
+        monitor.start(queue: queue)
+        network = monitor
     }
 
     /// Ends the Claude turns whose process is gone. True when one was showing.
