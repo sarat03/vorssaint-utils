@@ -5,8 +5,10 @@ import Darwin
 import Foundation
 
 /// What one log line says, reduced to the few facts the island keeps. Only
-/// usage counters, model names, times and folder names leave a line; prompts,
-/// replies and tool output are never decoded into anything that is stored.
+/// usage counters, model names, times and folder names leave a line, besides
+/// the identifiers of Claude's shell commands still running, held in memory
+/// only; prompts, replies and tool output are never decoded into anything
+/// that is stored.
 enum AgentLogEntry: Equatable {
     /// `key` identifies the response across duplicate lines and files.
     case usage(key: String, record: AgentUsageRecord, billable: AgentBillable)
@@ -140,7 +142,16 @@ enum AgentLogParser {
         // Tool results arrive inside a turn and can be large; while a turn is
         // open, the line only has to say that work goes on.
         if state.turnOpen {
-            state.runningCommands = state.runningCommands.filter { line.range(of: Data($0.utf8)) == nil }
+            if !state.runningCommands.isEmpty {
+                if contains(line, #""tool_use_id""#) {
+                    state.runningCommands = state.runningCommands.filter { line.range(of: Data($0.utf8)) == nil }
+                } else if let json = object(line), json["type"] as? String == "user",
+                          json["isMeta"] as? Bool != true, json["isSidechain"] as? Bool != true {
+                    // A prompt inside an open turn, as when a session killed
+                    // in the middle of a command resumes, leaves it behind.
+                    state.runningCommands = []
+                }
+            }
             return [.turnActive(nil)]
         }
         // A subagent's prompts and tool output never open a turn, and its
@@ -197,8 +208,9 @@ enum AgentLogParser {
             where block["type"] as? String == "tool_use" && block["name"] as? String == "Bash" {
                 if let id = block["id"] as? String { state.runningCommands.insert(id) }
             }
-            if !state.turnOpen { entries.append(.turnBegan(date)) }
-            else { entries.append(.turnActive(date)) }
+            // Ahead of the usage, so a reply that opens the turn again, as
+            // after an offline end, counts toward it.
+            entries.insert(state.turnOpen ? .turnActive(date) : .turnBegan(date), at: 0)
             state.turnOpen = true
         }
         return entries
