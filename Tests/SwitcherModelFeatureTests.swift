@@ -296,6 +296,18 @@ enum SwitcherModelFeatureTests {
             suite.expect(migrationDefaults.object(forKey: DefaultsKey.notchHiddenControls) == nil
                    && migrationDefaults.bool(forKey: DefaultsKey.notchScratchpadControlHidden),
                    "a setup that never customized the controls keeps the registered default")
+            migrationDefaults.set("microphone,panel", forKey: DefaultsKey.notchHiddenControls)
+            Defaults.hideKeyboardLightControlOnce(in: migrationDefaults)
+            suite.expect(migrationDefaults.string(forKey: DefaultsKey.notchHiddenControls)
+                   == "microphone,panel,keyboardLight"
+                   && migrationDefaults.bool(forKey: DefaultsKey.notchKeyboardLightControlHidden),
+                   "a hidden-controls list saved before the keyboard light level existed hides it once")
+            migrationDefaults.set("microphone,panel", forKey: DefaultsKey.notchHiddenControls)
+            Defaults.hideKeyboardLightControlOnce(in: migrationDefaults)
+            suite.expect(migrationDefaults.string(forKey: DefaultsKey.notchHiddenControls) == "microphone,panel",
+                   "showing the keyboard light level afterwards is kept")
+            migrationDefaults.removeObject(forKey: DefaultsKey.notchKeyboardLightControlHidden)
+            migrationDefaults.removeObject(forKey: DefaultsKey.notchHiddenControls)
             let hiddenControlsKey = DefaultsKey.notchHiddenControls
             let scratchpadMigrationKey = DefaultsKey.notchScratchpadControlHidden
             suite.expect(SettingsBackupSupport.exportKeys().contains(scratchpadMigrationKey),
@@ -1967,10 +1979,10 @@ enum SwitcherModelFeatureTests {
         // decision above is made consciously, never by omission.
         let releasePlist = NSDictionary(contentsOfFile: "Resources/Info.plist")
         let plistVersion = (releasePlist?["CFBundleShortVersionString"] as? String) ?? ""
-        suite.expect(plistVersion == "3.4.1-beta.1",
+        suite.expect(plistVersion == "3.4.1-beta.2",
                "bumping the app version requires re-deciding the support prompt pin above")
         let plistBuild = (releasePlist?["CFBundleVersion"] as? String) ?? ""
-        suite.expect(plistBuild == "96",
+        suite.expect(plistBuild == "97",
                "every app version needs its own incremented bundle build")
         suite.expect(SupportUpdateIntroInfo.releaseVersion == "3.4.0",
                "the support prompt is prepared for the 3.4 final release")
@@ -3908,8 +3920,8 @@ enum SwitcherModelFeatureTests {
                                        hasFullscreenWindows: false,
                                        hasModifiers: false,
                                        minimizeEnabled: false,
-                                       hideEnabled: true) == .hide,
-               "hiding also works for a frontmost app with no windows")
+                                       hideEnabled: true) == .passThrough,
+               "a frontmost app with no windows lets the Dock open a new one")
         suite.expect(DockClickSupport.action(appIsFrontmost: true,
                                        hasUnminimizedWindows: false,
                                        hasMinimizedWindows: true,
@@ -4194,6 +4206,15 @@ enum SwitcherModelFeatureTests {
         suite.expect(WindowServerSupport.bounds(from: scannedNeighbours[0]) == scannedWindow
                 && WindowServerSupport.bounds(from: [:]) == nil,
                "a window's rectangle comes from its bounds entry and from nothing else")
+        // Window snapping follows a dragged window through this lookup rather
+        // than asking the window's own application, which answers on the main
+        // thread that is busy redrawing that drag.
+        suite.expect(WindowServerSupport.frame(ofWindowID: 12, in: scannedNeighbours) == scannedNeighbour
+                && WindowServerSupport.frame(ofWindowID: 11, in: scannedNeighbours) == scannedWindow,
+               "a window's rectangle is found by its own identifier, not by position in the list")
+        suite.expect(WindowServerSupport.frame(ofWindowID: 99, in: scannedNeighbours) == nil
+                && WindowServerSupport.frame(ofWindowID: 11, in: []) == nil,
+               "a window the window server no longer lists reports no rectangle")
         suite.expect(WindowServerSupport.windowCandidate(in: scannedNeighbours, at: scannedEdgePoint,
                                                    ownProcessID: 501,
                                                    pidIsEligible: { _ in true })?.pid == 1001,

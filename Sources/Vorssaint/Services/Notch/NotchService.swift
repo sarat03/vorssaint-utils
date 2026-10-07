@@ -246,6 +246,9 @@ final class NotchService: ObservableObject {
     private var volumeDeviceUID: String?
     /// System uptime until which an output change counts as the island's own.
     private var ownVolumeAdjustmentUntil: TimeInterval = 0
+    /// When the output last moved its own level, so the rest of that ramp
+    /// stays quiet with it.
+    private var lastVolumeRide: TimeInterval = -.infinity
     private var notchNeedsMonitor = false
     private var menuSpaceTimer: Timer?
     private var menuSpaceReading = false
@@ -404,7 +407,7 @@ final class NotchService: ObservableObject {
     private var mascotWantsRoom: Bool { NotchMascotSupport.isEnabled() }
 
     var hasTimerActivity: Bool {
-        NotchTimerSupport.showsActivity(hasSession: NotchTimerService.shared.session.hasSession)
+        NotchTimerSupport.showsActivity(NotchTimerService.shared.session)
     }
 
     var hasWatchActivity: Bool {
@@ -754,8 +757,8 @@ final class NotchService: ObservableObject {
                           detailHeight: CGFloat?, musicExtraHeight: CGFloat, fileMediaHeight: CGFloat?, toolCount: Int?,
                           capturePreviewHeight: CGFloat?) -> CGSize {
         let controls = NotchSupport.controls()
-        let sliders = controls.filter { $0 == .volume || $0 == .brightness }.count
-        let shortcuts = controls.filter { $0 != .volume && $0 != .brightness && $0 != .music }.count
+        let sliders = controls.filter(\.isLevel).count
+        let shortcuts = controls.filter { !$0.isLevel && $0 != .music }.count
         let musicExtras = NotchLyricsSupport.isEnabled() || NotchQueueSupport.isEnabled()
         return geometry.expandedSize(module: module, detail: detail, panel: panel, detailHeight: detailHeight,
                                      shortcutCount: shortcuts,
@@ -1345,6 +1348,16 @@ final class NotchService: ObservableObject {
         mutatePresentation { musicDetailVisible = visible }
     }
 
+    /// The Pomodoro's readouts add a row to the timer's page, so choosing a
+    /// mode can change the open island's height. The new mode fades in as a
+    /// new page does while the island springs to its size. Left to the
+    /// preference sync, the open island jumped there a moment later.
+    func selectTimerMode(_ mode: NotchTimerMode) {
+        guard mode != NotchTimerSupport.savedMode() else { return }
+        UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKey.notchTimerMode)
+        refreshPresentation(transitionContent: .replace)
+    }
+
     @discardableResult
     func showClipboard(toggle: Bool = false) -> Bool {
         guard acceptsUserInteraction, NotchSupport.routesClipboardWindow() else { return false }
@@ -1688,7 +1701,7 @@ final class NotchService: ObservableObject {
             case .calendar: select(.calendar)
             case .commandBar: perform { CommandBarService.shared.show() }
             case .scratchpad: openScratchpad()
-            case .volume, .brightness: select(.controls)
+            case .volume, .brightness, .keyboardLight: select(.controls)
             }
         }
     }
@@ -3013,7 +3026,8 @@ final class NotchService: ObservableObject {
                              customHeight: UserDefaults.standard.double(forKey: DefaultsKey.notchCustomHeight),
                              cameraFit: NotchCameraFit.current(), silhouette: NotchSilhouette.current(),
                              capsuleFit: NotchCapsuleFit.current(),
-                             outline: UserDefaults.standard.bool(forKey: DefaultsKey.notchOutlineEnabled))
+                             outline: UserDefaults.standard.bool(forKey: DefaultsKey.notchOutlineEnabled),
+                             barEdge: 1 / max(1, screen.backingScaleFactor))
     }
 
     private func updateFullscreenVisibility(displayID: CGDirectDisplayID) {
@@ -3629,10 +3643,27 @@ final class NotchService: ObservableObject {
 
     private func volumeChanged(_ volume: Double?, muted: Bool?) {
         defer { volumeBaseline = volume; muteBaseline = muted }
-        guard volumeDeviceUID != nil, let volume, volumeBaseline != nil,
-              volume != volumeBaseline || (muteBaseline != nil && muted != muteBaseline) else { return }
+        guard volumeDeviceUID != nil, let volume, let baseline = volumeBaseline,
+              volume != baseline || (muteBaseline != nil && muted != muteBaseline) else { return }
         // Volume keys still announce themselves through showCurrentVolume.
         guard !expanded || ProcessInfo.processInfo.systemUptime >= ownVolumeAdjustmentUntil else { return }
+        // A level the output set on its own carries no news: adaptive volume
+        // rides the level for as long as the room is noisy, and each step
+        // used to reschedule the indicator's dismissal, so it never left the
+        // screen. Those steps move the state quietly, the way an automatic
+        // brightness change raises no notice of its own. Muting always
+        // reports, and so does a key step.
+        let muteChanged = muteBaseline != nil && muted != muteBaseline
+        if !muteChanged {
+            let origin = NotchSupport.volumeChangeOrigin(
+                from: baseline, to: volume,
+                sinceRide: ProcessInfo.processInfo.systemUptime - lastVolumeRide)
+            guard origin == .announces else {
+                lastVolumeRide = ProcessInfo.processInfo.systemUptime
+                return
+            }
+        }
+        lastVolumeRide = -.infinity
         showVolume(volume, muted: muted)
     }
 
@@ -3978,7 +4009,8 @@ extension NotchService {
     func commandBarDropSource() -> CGRect? {
         guard acceptsSystemFeedback, !hiddenUntilHover, !fullscreenCompact, !expanded, captureControls == nil,
               panel?.isVisible == true, let frame = windowHost?.visibleFrame, !frame.isEmpty,
-              geometry.screen.contains(NSEvent.mouseLocation) else { return nil }
+              // The top pixel row is the screen's too, where CGRect.contains says no.
+              NSMouseInRect(NSEvent.mouseLocation, geometry.screen, false) else { return nil }
         let gap = geometry.floatingGap ?? 0
         return frame.insetBy(dx: 0, dy: min(gap, frame.height / 2 - 1))
     }
@@ -3987,7 +4019,7 @@ extension NotchService {
     /// which then holds the keyboard. Nil when the island cannot open here.
     func presentCommandBar() -> NSPanel? {
         guard NotchSupport.isEnabled(), acceptsUserInteraction, !hiddenInFullscreen, captureControls == nil,
-              !heldDrag, geometry.screen.contains(NSEvent.mouseLocation), let panel else { return nil }
+              !heldDrag, NSMouseInRect(NSEvent.mouseLocation, geometry.screen, false), let panel else { return nil }
         // The keyboard first, before the island changes shape, so keys typed
         // right after the shortcut wait here for the bar's field.
         panel.acceptsKeyFocus = true
