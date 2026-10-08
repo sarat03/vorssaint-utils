@@ -1137,6 +1137,15 @@ enum NotchTests {
                && NotchSupport.sanitizedCloseDelay(-1) == 0.10 && NotchSupport.sanitizedCloseDelay(9) == 2.0
                && NotchSupport.sanitizedCloseDelay(.nan) == 0.18,
                "closing after the pointer leaves keeps its old pause and stays within usable bounds")
+        defaults.set(1.5, forKey: DefaultsKey.notchCloseDelay)
+        suite.expect(NotchSupport.closeDelay(in: defaults) == 1.5,
+                     "the closing delay reads the saved preference")
+        defaults.set("invalid", forKey: DefaultsKey.notchCloseDelay)
+        suite.expect(NotchSupport.closeDelay(in: defaults) == 0.18,
+                     "a closing delay stored with the wrong type uses the default")
+        defaults.removeObject(forKey: DefaultsKey.notchCloseDelay)
+        suite.expect(NotchSupport.closeDelay(in: defaults) == 0.18,
+                     "removing the closing preference restores the original delay")
         suite.expect(!NotchSupport.routesAppPanel(in: defaults) && NotchSupport.routesQuickPanel(in: defaults)
                && NotchSupport.routesClipboardWindow(in: defaults) && NotchSupport.routesShelf(in: defaults)
                && NotchSupport.routesCaptureControls(in: defaults),

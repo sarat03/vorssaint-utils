@@ -572,7 +572,7 @@ struct NotchSettings: View {
                 }
                 if hover {
                     hoverDelayControl
-                    closeDelayControl
+                    if hoverExpand { closeDelayControl }
                 }
                 switchRow("hand.draw", FeatureStrings.notchGestures(l10n.language).title,
                           caption: gesturesEnabled ? FeatureStrings.notchGestures(l10n.language).hint : nil,
